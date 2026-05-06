@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { BarChart, Tag, Settings, Zap } from 'lucide-react'
+import { BarChart, Database, Settings, Zap } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import SettingsPage from './pages/Settings'
@@ -31,8 +31,8 @@ function Sidebar() {
           Dashboard
         </NavLink>
         <NavLink to="/products" className={linkClass}>
-          <Tag size={18} />
-          Vendor Prices
+          <Database size={18} />
+          Product Database
         </NavLink>
         <NavLink to="/settings" className={linkClass}>
           <Settings size={18} />
