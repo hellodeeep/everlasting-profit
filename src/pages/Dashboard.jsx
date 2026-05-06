@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, BarChart, ChevronDown, ChevronRight, X, Filter, AlertTriangle } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
+import { useDataStore } from '../lib/dataStore'
 
 function getDateRange(preset) {
   const today = new Date()
@@ -37,42 +38,18 @@ function PnLLine({ label, value, indent, bold }) {
 }
 
 export default function Dashboard() {
-  const [preset, setPreset] = useState('today')
+  const { rawData, setRawData } = useDataStore()
+  const [preset, setPreset] = useState(rawData?.preset || 'today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [rawData, setRawData] = useState(null)
-  const [cachedDateLabel, setCachedDateLabel] = useState('')
-  const [lastFetch, setLastFetch] = useState(null)
   const [productFilter, setProductFilter] = useState(null)
   const [showPnL, setShowPnL] = useState(false)
 
   const dateRange = preset === 'custom' ? customRange : getDateRange(preset)
   const dateLabel = dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`
-
-  // Load cache on mount
-  useEffect(() => {
-    try {
-      const c = JSON.parse(localStorage.getItem('everlasting_dashboard') || 'null')
-      if (c?.rawData) {
-        setRawData(c.rawData)
-        setCachedDateLabel(c.dateLabel || '')
-        setLastFetch(c.lastFetch ? new Date(c.lastFetch) : null)
-        if (c.preset) setPreset(c.preset)
-      }
-    } catch {}
-  }, [])
-
-  // Save cache
-  useEffect(() => {
-    if (rawData) {
-      try {
-        localStorage.setItem('everlasting_dashboard', JSON.stringify({
-          rawData, dateLabel: cachedDateLabel, lastFetch: lastFetch?.toISOString(), preset
-        }))
-      } catch {}
-    }
-  }, [rawData, cachedDateLabel, lastFetch, preset])
+  const cachedDateLabel = rawData?.dateLabel || ''
+  const lastFetch = rawData?.lastFetch ? new Date(rawData.lastFetch) : null
 
   // Load product database for campaign codes + vendor prices
   const dbProducts = useMemo(() => getProducts(), [rawData]) // re-check on fetch
@@ -110,16 +87,21 @@ export default function Dashboard() {
         metaRawSpend = meta?.summary?.totalSpend || 0
       } catch (e) { console.warn('Meta unavailable:', e.message) }
 
-      const data = { orders: shopify.orders, metaCampaigns, metaRawSpend, apiMeta: shopify.meta }
-      setRawData(data)
-      setCachedDateLabel(dateLabel)
-      setLastFetch(new Date())
+      setRawData({
+        orders: shopify.orders,
+        metaCampaigns,
+        metaRawSpend,
+        apiMeta: shopify.meta,
+        dateLabel,
+        lastFetch: new Date().toISOString(),
+        preset,
+      })
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [dateRange.since, dateRange.until, dateLabel])
+  }, [dateRange.since, dateRange.until, dateLabel, preset, setRawData])
 
   const isStale = cachedDateLabel && cachedDateLabel !== dateLabel
   const p = pnl

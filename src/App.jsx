@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import { BarChart, Database, Settings, Zap } from 'lucide-react'
+import { DataProvider } from './lib/dataStore'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import SettingsPage from './pages/Settings'
@@ -24,22 +25,17 @@ function Sidebar() {
           <p className="text-[10px] text-brand-400 tracking-widest uppercase">Profit Tracker</p>
         </div>
       </div>
-
       <nav className="flex-1 px-3 space-y-1 mt-4">
         <NavLink to="/" className={linkClass} end>
-          <BarChart size={18} />
-          Dashboard
+          <BarChart size={18} /> Dashboard
         </NavLink>
         <NavLink to="/products" className={linkClass}>
-          <Database size={18} />
-          Product Database
+          <Database size={18} /> Product Database
         </NavLink>
         <NavLink to="/settings" className={linkClass}>
-          <Settings size={18} />
-          Settings
+          <Settings size={18} /> Settings
         </NavLink>
       </nav>
-
       <div className="px-5 py-4 border-t border-brand-800/30">
         <p className="text-[10px] text-brand-500">9 Figures Club Pvt Ltd</p>
       </div>
@@ -49,17 +45,19 @@ function Sidebar() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <main className="flex-1 ml-60 p-8">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <DataProvider>
+      <BrowserRouter>
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 ml-60 p-8">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </main>
+        </div>
+      </BrowserRouter>
+    </DataProvider>
   )
 }
