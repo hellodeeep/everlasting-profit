@@ -1,16 +1,16 @@
 // Vendor Price Lookup - sourced from Validation sheet
-// Key = lowercase product name pattern, Value = vendor cost per unit
+// Key = lowercase pattern, Value = vendor cost PER UNIT (single piece)
 
 export const DEFAULT_VENDOR_PRICES = {
   "name necklace": 115,
   "double name necklace": 150,
   "bar necklace": 120,
   "reversible tag necklace": 180,
-  "cuff bracelet": 72,
   "personalised cuff bracelet": 72,
+  "cuff bracelet": 72,
   "tree of life necklace": 200,
   "cross name necklace": 95,
-  "fimo beads name necklace": 180,
+  "fimo beads": 180,
   "name bracelet": 220,
   "indic name necklace": 95,
   "flower name necklace": 115,
@@ -18,27 +18,28 @@ export const DEFAULT_VENDOR_PRICES = {
   "punjabi name necklace": 95,
   "arabic name necklace": 115,
   "signature couple heart": 160,
-  "11:11 necklace": 80,
+  "11:11 necklace": 80,  
   "butterfly necklace": 150,
-  "dainty evil eye necklace": 32,
+  "dainty evil eye": 32,
   "diamond studded initial": 375,
   "double heart necklace": 30,
   "emerald stone necklace": 218,
   "evil eye necklace": 32,
-  "lock pendant necklace": 115,
+  "lock pendant": 115,
   "golden heart necklace": 18,
   "golden teddy necklace": 512,
-  "heart & stone necklace": 230,
+  "heart & stone": 230,
+  "heart stone necklace": 230,
   "initial necklace": 20,
-  "linked circle necklace": 167,
-  "lock and key necklace": 260,
+  "linked circle": 167,
+  "lock and key": 260,
   "moon necklace": 167,
-  "pearl teddy necklace": 218,
+  "pearl teddy": 218,
   "saturn necklace": 32,
-  "star pendant necklace": 167,
-  "statement rose necklace": 218,
+  "star pendant": 167,
+  "statement rose": 218,
   "sweetheart necklace": 197,
-  "yin and yang necklace": 27,
+  "yin and yang": 27,
   "name ring": 180,
   "paw name ring": 180,
   "heart name ring": 180,
@@ -53,10 +54,11 @@ export const DEFAULT_VENDOR_PRICES = {
   "minimal snake anklet": 14,
   "round snake anklet": 20,
   "eternal heart necklace": 120,
+  "eternal love heart": 120,
   "perfume": 390,
   "floral elegance anklet": 175,
   "hug necklace": 120,
-  "mangalsutra": 150,
+  "radiant mangalsutra": 150,
   "enchanted heartbeat anklet": 225,
   "everlasting prism anklet": 225,
   "eternal bond mangalsutra": 150,
@@ -71,7 +73,6 @@ export const DEFAULT_VENDOR_PRICES = {
   "fairy wings mangalsutra": 170,
   "forever love bracelet": 30,
   "obsidian sparkle": 155,
-  "heart stone necklace": 230,
   "floral mangalsutra": 155,
   "butterfly anklet": 31,
   "premium gift box": 22,
@@ -84,13 +85,15 @@ export const DEFAULT_VENDOR_PRICES = {
   "butterfly bracelet": 31,
   "cute pearly bracelet": 15,
   "interlinked diamond bracelet": 130,
+  "diamond tennis bracelet": 193,
   "cupid heart bracelet": 104,
   "elegant bracelet": 105,
+  "dual heart bracelet": 105,
   "daisy bracelet": 35,
   "daisy anklet": 35,
   "twinkling watch": 112,
-  "morse code": 47,
-  "morse code bracelet": 39,
+  "morse code jewellery": 47,
+  "morse code anklet": 47,
   "kashmiri bangles": 230,
   "queen name necklace": 115,
   "angel name necklace": 150,
@@ -99,7 +102,6 @@ export const DEFAULT_VENDOR_PRICES = {
   "halo necklace": 120,
   "opearl necklace": 182,
   "forge bracelet": 150,
-  "dual heart bracelet": 105,
   "blooming grace": 305,
   "ananta": 350,
   "jar of emotions": 30,
@@ -110,76 +112,69 @@ export const DEFAULT_VENDOR_PRICES = {
   "pyrite anklet": 95,
   "karungali mala": 85,
   "money magnet bracelet": 85,
-  "diamond tennis bracelet": 193,
   "everlasting guardian bell": 35,
   "myra mangalsutra": 70,
-  "morse code anklet": 47,
   "name necklace with personalised photo": 150,
   "mangalsutra name necklace": 95,
+  "initial evil eye kada": 215,
 }
 
-// Fixed costs per shipment
+// C2P partial payment amount
+export const C2P_AMOUNT = 150;
+
+// COD delivery rate assumption for expected profit
+export const COD_DELIVERY_RATE = 0.5;
+
+// Fixed costs per shipment (1 shipment = 1 order, regardless of items)
 export const LOGISTICS_COSTS = {
-  box: 34.3,           // avg box cost
-  warrantyCard: 1.3,   // small card
-  freeRing: 12.6,      // free ring per necklace order
-  packingBag: 3.304,   // packing bag per order
-  shipping: 65,        // avg shipping per order
+  box: 34.3,
+  warrantyCard: 1.3,
+  freeRing: 12.6,   // only for orders containing a necklace
+  packingBag: 3.304,
+  shipping: 65,
 }
 
-// Fee percentages
+// Fee rates applied on prepaid revenue (including C2P upfront)
 export const FEE_RATES = {
-  cashfree: 0.0134,    // ~1.34% of prepaid revenue
-  engage: 0.00134,     // Engage fee
-  checkout: 0.0077,    // Checkout fee (Fastrr)
+  cashfree: 0.0134,
+  engage: 0.00134,
+  checkout: 0.0077,
 }
 
 /**
- * Find vendor price for a product name
- * Matches by finding the longest matching key in the product name
+ * Find vendor price for a product. Matches longest key contained in title.
  */
-export function findVendorPrice(productName, customPrices = {}) {
-  const name = productName.toLowerCase()
-  const allPrices = { ...DEFAULT_VENDOR_PRICES, ...customPrices }
-
-  // Try exact-ish match first (longest key that's contained in the name)
-  let bestMatch = null
-  let bestLen = 0
-
-  for (const [key, price] of Object.entries(allPrices)) {
+export function findVendorPrice(title, customPrices = {}) {
+  const name = title.toLowerCase()
+  const all = { ...DEFAULT_VENDOR_PRICES, ...customPrices }
+  let best = null, bestLen = 0
+  for (const [key, price] of Object.entries(all)) {
     if (name.includes(key) && key.length > bestLen) {
-      bestMatch = { key, price }
+      best = { key, price }
       bestLen = key.length
     }
   }
-
-  return bestMatch ? bestMatch.price : 0
+  return best ? best.price : 0
 }
 
 /**
- * Detect quantity multiplier from variant string
- * "Buy 2 @ 1899" -> 2, "Buy 3 @ 2199" -> 3, "Pack of 2" -> 2
+ * Detect buy multiplier: "Buy 2 @ 1899" -> 2, "Buy 3 @ 2199" -> 3
  */
-export function detectMultiplier(productName, variantTitle) {
-  const combined = `${productName} ${variantTitle || ''}`.toLowerCase()
+export function detectBuyMultiplier(title, variant) {
+  const text = `${title} ${variant || ''}`.toLowerCase()
+  const m = text.match(/buy\s*(\d+)/i)
+  return m ? parseInt(m[1]) : 1
+}
 
-  // Check for "Buy X" pattern
-  const buyMatch = combined.match(/buy\s*(\d+)/i)
-  if (buyMatch) return parseInt(buyMatch[1])
-
-  // Check for "Pack of X" for anklets (means X legs, still 1 product unit for cost)
-  // Pack of 2 (Both Leg) = 1 unit with higher vendor cost already baked in
-  // Pack of 1 (Single Leg) = 1 unit
-  // These are already reflected in vendor price lookup
-
+/**
+ * Detect pack multiplier for anklets: "Pack of 2 (Both Leg)" -> 2
+ * This means vendor cost is base * 2 (2 physical pieces)
+ */
+export function detectPackMultiplier(title, variant) {
+  const text = `${title} ${variant || ''}`.toLowerCase()
+  if (text.includes('pack of 2') || text.includes('both leg')) return 2
+  // "Set of 28 bangles" or "Set of 14 bangles"
+  const setMatch = text.match(/set of (\d+)/i)
+  if (setMatch) return 1 // vendor price already accounts for the set
   return 1
-}
-
-/**
- * Detect if product is a "pack" variant where vendor price is already for the pack
- * e.g., Snake Anklet Pack of 2 = vendor price 70 (not 35×2)
- */
-export function isPackProduct(productName) {
-  const name = productName.toLowerCase()
-  return name.includes('pack of 2') || name.includes('both leg')
 }

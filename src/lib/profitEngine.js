@@ -1,221 +1,228 @@
-// Profit Engine v2 - Order-level processing
-// Mirrors the manual Excel sheet logic exactly
-
-import { findVendorPrice, detectMultiplier, isPackProduct, LOGISTICS_COSTS, FEE_RATES } from './vendorPrices'
+// Profit Engine v3 - Order-level, variant-level, C2P-aware
+import { findVendorPrice, detectBuyMultiplier, detectPackMultiplier, C2P_AMOUNT, COD_DELIVERY_RATE, LOGISTICS_COSTS, FEE_RATES } from './vendorPrices'
 
 /**
- * Normalize a product title into a "family" name
+ * Get product family from full title
  * "Name Necklace - Gold / Buy 2 @ 1899" -> "Name Necklace"
- * "Snake Anklet - Pack of 2 ( Both Leg ) / Silver" -> "Snake Anklet"
- * "Premium Gift Box with Gift Wrap" -> "Premium Gift Box"
  */
 export function getProductFamily(title) {
+  // Strip color/variant suffix
   let name = title
-    .replace(/\s*-\s*(Gold|Silver|Rose Gold|Maroon|Gullabi|Blue|Black|White|Red|Pink|Green|Purple).*$/i, '')
-    .replace(/\s*\/\s*(Buy|Pack|Gold|Silver|Rose|Single|Both|Male|Female|R|One|Two).*$/i, '')
-    .replace(/\s*-\s*(Pack of|Buy).*$/i, '')
-    .replace(/\s+with\s+(Gift Wrap|Message Card|Personalised).*$/i, '')
-    .replace(/\s*\(.*?\)\s*/g, '')
+    .replace(/\s*-\s*(Gold|Silver|Rose Gold|Maroon|Gullabi|Blue|Black|White|Red|Pink|Green|Purple|Couple).*$/i, '')
+    .replace(/\s*\/\s*.+$/, '')
+    .replace(/\s*\(.*?\)/g, '')
     .trim()
-
-  // Normalize known families
-  const lower = name.toLowerCase()
-  if (lower.includes('premium gift box')) return 'Premium Gift Box'
-  if (lower.includes('name necklace') && !lower.includes('arabic') && !lower.includes('flower') && !lower.includes('queen') && !lower.includes('angel') && !lower.includes('fairy') && !lower.includes('butterfly') && !lower.includes('cross') && !lower.includes('mangalsutra') && !lower.includes('hindi') && !lower.includes('punjabi') && !lower.includes('indic') && !lower.includes('double') && !lower.includes('couple') && !lower.includes('signature') && !lower.includes('fimo') && !lower.includes('photo')) return 'Name Necklace'
-
+  if (!name) name = title.split(' - ')[0].split(' / ')[0].trim()
   return name
 }
 
 /**
- * Process a single order and calculate its expected profit contribution
+ * Get full variant key for detailed breakdown
+ * "Name Necklace - Gold / Buy 2 @ 1899" -> "Name Necklace - Gold / Buy 2"
  */
-export function processOrder(order, customVendorPrices = {}) {
-  if (order.cancelled) {
-    return {
-      orderId: order.id,
-      cancelled: true,
-      paymentMethod: order.paymentMethod,
-      revenue: 0,
-      expectedRevenue: 0,
-      totalCOGS: 0,
-      logistics: 0,
-      lineItems: [],
-    }
-  }
-
-  const isPrepaid = order.paymentMethod === 'prepaid'
-
-  // Process each line item
-  const processedItems = order.lineItems.map(item => {
-    const vendorPrice = findVendorPrice(item.title, customVendorPrices)
-    const multiplier = detectMultiplier(item.title, item.variantTitle)
-    const isPack = isPackProduct(item.title)
-
-    // For "Pack of 2 (Both Leg)" products, vendor price is already for the pack
-    let unitVendorCost = vendorPrice
-    if (isPack) {
-      unitVendorCost = vendorPrice * 2 // e.g., Snake Anklet 35*2 = 70 for pack of 2
-    }
-
-    // For "Buy 2 @ 1899" - multiply vendor cost by buy quantity
-    const totalVendorCost = unitVendorCost * multiplier * item.quantity
-
-    return {
-      title: item.title,
-      variantTitle: item.variantTitle,
-      family: getProductFamily(item.title),
-      quantity: item.quantity,
-      multiplier,
-      sellingPrice: item.price,
-      lineTotal: item.lineTotal,
-      vendorPricePerUnit: vendorPrice,
-      totalVendorCost,
-      isGiftBox: item.title.toLowerCase().includes('premium gift box'),
-    }
-  })
-
-  // Logistics: 1 shipment per order, regardless of items
-  const hasNecklace = processedItems.some(i =>
-    i.title.toLowerCase().includes('necklace') && !i.isGiftBox
-  )
-  const logisticsCost =
-    LOGISTICS_COSTS.box +
-    LOGISTICS_COSTS.warrantyCard +
-    LOGISTICS_COSTS.packingBag +
-    LOGISTICS_COSTS.shipping +
-    (hasNecklace ? LOGISTICS_COSTS.freeRing : 0)
-
-  const totalCOGS = processedItems.reduce((s, i) => s + i.totalVendorCost, 0)
-
-  // Revenue calculation
-  // Prepaid: full order total
-  // COD Expected: order total * 0.5 (50% delivery assumption from your sheet)
-  const orderRevenue = order.totalPrice
-  const expectedRevenue = isPrepaid ? orderRevenue : orderRevenue * 0.5
-
-  // Fees on prepaid revenue
-  const cashfreeFee = isPrepaid ? orderRevenue * FEE_RATES.cashfree : 0
-  const engageFee = isPrepaid ? orderRevenue * FEE_RATES.engage : 0
-  const checkoutFee = isPrepaid ? orderRevenue * FEE_RATES.checkout : 0
-  const totalFees = cashfreeFee + engageFee + checkoutFee
-
-  // Expected profit for this order (before ad spend)
-  const totalExpense = totalCOGS + logisticsCost + totalFees
-  const expectedProfit = expectedRevenue - totalExpense
-
-  return {
-    orderId: order.id,
-    cancelled: false,
-    paymentMethod: order.paymentMethod,
-    revenue: orderRevenue,
-    expectedRevenue,
-    totalCOGS,
-    logistics: logisticsCost,
-    fees: totalFees,
-    cashfreeFee,
-    engageFee,
-    checkoutFee,
-    totalExpense,
-    expectedProfit,
-    lineItems: processedItems,
-  }
+export function getVariantKey(title, variantTitle) {
+  if (variantTitle) return `${title.split(' / ')[0]} / ${variantTitle}`
+  return title
 }
 
 /**
- * Process all orders and generate full P&L
+ * Process all orders into full P&L with product + variant breakdown
  */
 export function calculateFullPnL(orders, metaSpend = 0, customVendorPrices = {}) {
-  const processed = orders.map(o => processOrder(o, customVendorPrices))
-  const active = processed.filter(o => !o.cancelled)
-  const prepaid = active.filter(o => o.paymentMethod === 'prepaid')
-  const cod = active.filter(o => o.paymentMethod === 'cod')
+  const activeOrders = orders.filter(o => !o.cancelled)
+  const cancelledOrders = orders.filter(o => o.cancelled)
 
-  // Overall P&L
-  const totalRevenue = active.reduce((s, o) => s + o.revenue, 0)
-  const expectedRevenue = active.reduce((s, o) => s + o.expectedRevenue, 0)
-  const totalCOGS = active.reduce((s, o) => s + o.totalCOGS, 0)
-  const totalLogistics = active.reduce((s, o) => s + o.logistics, 0)
-  const totalFees = active.reduce((s, o) => s + o.fees, 0)
-  const totalExpenseBeforeAds = totalCOGS + totalLogistics + totalFees
-  const totalExpense = totalExpenseBeforeAds + metaSpend
-  const expectedProfit = expectedRevenue - totalExpense
-  const actualRevenuePrepaid = prepaid.reduce((s, o) => s + o.revenue, 0)
+  // Classify orders
+  const prepaidOrders = activeOrders.filter(o => o.paymentType === 'prepaid')
+  const c2pOrders = activeOrders.filter(o => o.paymentType === 'c2p')
+  const codOrders = activeOrders.filter(o => o.paymentType === 'cod')
 
-  // Product-wise breakdown
-  const productMap = {}
-  active.forEach(order => {
+  // ====== REVENUE ======
+  const prepaidRevenue = prepaidOrders.reduce((s, o) => s + o.totalPrice, 0)
+  const c2pRevenue = c2pOrders.reduce((s, o) => s + o.totalPrice, 0)
+  const codRevenue = codOrders.reduce((s, o) => s + o.totalPrice, 0)
+  const totalRevenue = prepaidRevenue + c2pRevenue + codRevenue
+
+  // Expected revenue:
+  // Prepaid = 100% collected
+  // C2P = Rs.150 collected upfront + (total - 150) * delivery_rate
+  // COD = total * delivery_rate
+  const c2pExpected = c2pOrders.reduce((s, o) => {
+    return s + C2P_AMOUNT + Math.max(0, o.totalPrice - C2P_AMOUNT) * COD_DELIVERY_RATE
+  }, 0)
+  const codExpected = codOrders.reduce((s, o) => s + o.totalPrice * COD_DELIVERY_RATE, 0)
+  const expectedRevenue = prepaidRevenue + c2pExpected + codExpected
+
+  // Cashfree collection (what hits bank today): prepaid full + C2P Rs.150 per order
+  const cashfreeCollection = prepaidRevenue + (c2pOrders.length * C2P_AMOUNT)
+
+  // ====== COGS (Order-level with line items) ======
+  let totalCOGS = 0
+  const productMap = {} // family -> aggregated data
+  const variantMap = {} // variantKey -> aggregated data
+  const orderDetails = [] // processed order array
+
+  activeOrders.forEach(order => {
+    let orderCOGS = 0
+    const processedItems = []
+
     order.lineItems.forEach(item => {
-      const family = item.family
+      const vendorPrice = findVendorPrice(item.title, customVendorPrices)
+      const buyMult = detectBuyMultiplier(item.title, item.variantTitle)
+      const packMult = detectPackMultiplier(item.title, item.variantTitle)
+
+      // Total units = quantity * buyMultiplier (Buy 2 = 2 necklaces)
+      const totalUnits = item.quantity * buyMult
+      // Vendor cost = base_price * pack_multiplier * buy_multiplier * quantity
+      const vendorCost = vendorPrice * packMult * buyMult * item.quantity
+
+      orderCOGS += vendorCost
+
+      const family = getProductFamily(item.title)
+      const variantKey = item.variantTitle
+        ? `${item.title.split(' - ')[0].trim()} [${item.variantTitle}]`
+        : item.title
+
+      // Aggregate into product family
       if (!productMap[family]) {
         productMap[family] = {
           name: family,
-          vendorPrice: item.vendorPricePerUnit,
-          prepaidQty: 0,
-          codQty: 0,
-          totalQty: 0,
-          totalUnits: 0, // accounting for multipliers
-          prepaidRevenue: 0,
-          codRevenue: 0,
-          totalRevenue: 0,
-          totalVendorCost: 0,
-          expectedRate: 0, // vendor_cost * (prepaid + cod/2)
-          orderCount: 0,
+          vendorPriceBase: vendorPrice,
+          prepaidUnits: 0, codUnits: 0, c2pUnits: 0, totalUnits: 0,
+          prepaidOrders: 0, codOrders: 0, c2pOrders: 0, totalOrders: 0,
+          revenue: 0, vendorCost: 0,
+          variants: {},
         }
       }
-      const p = productMap[family]
-      const qty = item.quantity
-      const units = qty * item.multiplier
+      const pf = productMap[family]
+      pf.totalUnits += totalUnits
+      pf.totalOrders += item.quantity
+      pf.revenue += item.lineTotal
+      pf.vendorCost += vendorCost
+      if (order.paymentType === 'prepaid') { pf.prepaidUnits += totalUnits; pf.prepaidOrders += item.quantity }
+      else if (order.paymentType === 'c2p') { pf.c2pUnits += totalUnits; pf.c2pOrders += item.quantity }
+      else { pf.codUnits += totalUnits; pf.codOrders += item.quantity }
 
-      if (order.paymentMethod === 'prepaid') {
-        p.prepaidQty += units
-      } else {
-        p.codQty += units
+      // Aggregate into variant
+      if (!pf.variants[variantKey]) {
+        pf.variants[variantKey] = {
+          name: variantKey,
+          vendorPrice: vendorPrice * packMult * buyMult,
+          prepaidQty: 0, codQty: 0, c2pQty: 0, totalQty: 0,
+          revenue: 0, vendorCost: 0,
+        }
       }
-      p.totalQty += units
-      p.totalUnits += units
-      p.totalRevenue += item.lineTotal
-      if (order.paymentMethod === 'prepaid') p.prepaidRevenue += item.lineTotal
-      else p.codRevenue += item.lineTotal
-      p.totalVendorCost += item.totalVendorCost
-      p.orderCount++
+      const vr = pf.variants[variantKey]
+      vr.totalQty += item.quantity
+      vr.revenue += item.lineTotal
+      vr.vendorCost += vendorCost
+      if (order.paymentType === 'prepaid') vr.prepaidQty += item.quantity
+      else if (order.paymentType === 'c2p') vr.c2pQty += item.quantity
+      else vr.codQty += item.quantity
+
+      processedItems.push({
+        title: item.title,
+        variantTitle: item.variantTitle,
+        family,
+        quantity: item.quantity,
+        buyMultiplier: buyMult,
+        packMultiplier: packMult,
+        totalUnits,
+        sellingPrice: item.price,
+        lineTotal: item.lineTotal,
+        vendorPriceBase: vendorPrice,
+        vendorCost,
+      })
+    })
+
+    totalCOGS += orderCOGS
+
+    // Logistics per shipment
+    const hasNecklace = order.lineItems.some(i => i.title.toLowerCase().includes('necklace'))
+    const logistics = LOGISTICS_COSTS.box + LOGISTICS_COSTS.warrantyCard + LOGISTICS_COSTS.packingBag + LOGISTICS_COSTS.shipping + (hasNecklace ? LOGISTICS_COSTS.freeRing : 0)
+
+    // Fees on prepaid/c2p collected amount
+    let feeBase = 0
+    if (order.paymentType === 'prepaid') feeBase = order.totalPrice
+    else if (order.paymentType === 'c2p') feeBase = C2P_AMOUNT
+    const fees = feeBase * (FEE_RATES.cashfree + FEE_RATES.engage + FEE_RATES.checkout)
+
+    orderDetails.push({
+      id: order.id,
+      name: order.name,
+      paymentType: order.paymentType,
+      totalPrice: order.totalPrice,
+      cancelled: false,
+      tags: order.tags,
+      cogs: orderCOGS,
+      logistics,
+      fees,
+      totalExpense: orderCOGS + logistics + fees,
+      lineItems: processedItems,
     })
   })
 
-  // Calculate expected rates per product (vendor_cost * (prepaid + cod/2))
-  Object.values(productMap).forEach(p => {
-    p.expectedRate = p.vendorPrice * (p.prepaidQty + p.codQty / 2)
-  })
+  // ====== LOGISTICS (aggregate) ======
+  const necklaceOrders = activeOrders.filter(o => o.lineItems.some(i => i.title.toLowerCase().includes('necklace')))
+  const totalBoxes = activeOrders.length * LOGISTICS_COSTS.box
+  const totalWarranty = activeOrders.length * LOGISTICS_COSTS.warrantyCard
+  const totalFreeRing = necklaceOrders.length * LOGISTICS_COSTS.freeRing
+  const totalPacking = activeOrders.length * LOGISTICS_COSTS.packingBag
+  const totalShipping = activeOrders.length * LOGISTICS_COSTS.shipping
+  const totalLogistics = totalBoxes + totalWarranty + totalFreeRing + totalPacking + totalShipping
 
-  // Sort by total revenue descending
-  const products = Object.values(productMap).sort((a, b) => b.totalRevenue - a.totalRevenue)
+  // ====== FEES (aggregate) ======
+  const feeBaseTotal = prepaidRevenue + (c2pOrders.length * C2P_AMOUNT)
+  const totalCashfree = feeBaseTotal * FEE_RATES.cashfree
+  const totalEngage = feeBaseTotal * FEE_RATES.engage
+  const totalCheckout = feeBaseTotal * FEE_RATES.checkout
+  const totalFees = totalCashfree + totalEngage + totalCheckout
+
+  // ====== TOTAL EXPENSE & PROFIT ======
+  const totalExpenseBeforeAds = totalCOGS + totalLogistics + totalFees
+  const totalExpense = totalExpenseBeforeAds + metaSpend
+  const expectedProfit = expectedRevenue - totalExpense
+
+  // Sort products by revenue desc, convert variants to arrays
+  const products = Object.values(productMap)
+    .map(p => ({
+      ...p,
+      variants: Object.values(p.variants).sort((a, b) => b.revenue - a.revenue),
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
 
   return {
     overview: {
       totalOrders: orders.length,
-      activeOrders: active.length,
-      cancelledOrders: orders.length - active.length,
-      prepaidOrders: prepaid.length,
-      codOrders: cod.length,
-      prepaidRate: active.length > 0 ? prepaid.length / active.length : 0,
+      activeOrders: activeOrders.length,
+      cancelledOrders: cancelledOrders.length,
+      prepaidOrders: prepaidOrders.length,
+      c2pOrders: c2pOrders.length,
+      codOrders: codOrders.length,
+      prepaidRate: activeOrders.length > 0 ? prepaidOrders.length / activeOrders.length : 0,
     },
     revenue: {
       totalRevenue,
       expectedRevenue,
-      prepaidRevenue: actualRevenuePrepaid,
-      codRevenue: cod.reduce((s, o) => s + o.revenue, 0),
+      prepaidRevenue,
+      c2pRevenue,
+      c2pExpected,
+      codRevenue,
+      codExpected,
+      cashfreeCollection,
     },
     expenses: {
       metaAds: metaSpend,
       cogs: totalCOGS,
+      boxes: totalBoxes,
+      warrantyCard: totalWarranty,
+      freeRing: totalFreeRing,
+      packingBags: totalPacking,
+      shipping: totalShipping,
       logistics: totalLogistics,
-      boxes: active.length * LOGISTICS_COSTS.box,
-      warrantyCard: active.length * LOGISTICS_COSTS.warrantyCard,
-      freeRing: active.filter(o => o.lineItems.some(i => i.title.toLowerCase().includes('necklace'))).length * LOGISTICS_COSTS.freeRing,
-      packingBags: active.length * LOGISTICS_COSTS.packingBag,
-      shipping: active.length * LOGISTICS_COSTS.shipping,
-      cashfree: prepaid.reduce((s, o) => s + o.cashfreeFee, 0),
-      engage: prepaid.reduce((s, o) => s + o.engageFee, 0),
-      checkout: prepaid.reduce((s, o) => s + o.checkoutFee, 0),
+      cashfree: totalCashfree,
+      engage: totalEngage,
+      checkout: totalCheckout,
       totalFees,
       totalBeforeAds: totalExpenseBeforeAds,
       total: totalExpense,
@@ -223,19 +230,18 @@ export function calculateFullPnL(orders, metaSpend = 0, customVendorPrices = {})
     profit: {
       expected: expectedProfit,
       margin: expectedRevenue > 0 ? expectedProfit / expectedRevenue : 0,
-      perOrder: active.length > 0 ? expectedProfit / active.length : 0,
+      perOrder: activeOrders.length > 0 ? expectedProfit / activeOrders.length : 0,
     },
     metrics: {
-      cpp: active.length > 0 ? metaSpend / active.length : 0,
-      aov: active.length > 0 ? totalRevenue / active.length : 0,
+      cpp: activeOrders.length > 0 ? metaSpend / activeOrders.length : 0,
+      aov: activeOrders.length > 0 ? totalRevenue / activeOrders.length : 0,
       adSpendRatio: expectedRevenue > 0 ? metaSpend / expectedRevenue : 0,
     },
     products,
-    processedOrders: processed,
+    orderDetails,
   }
 }
 
-// Formatting helpers
 export function formatINR(amount) {
   if (amount === null || amount === undefined || isNaN(amount)) return '--'
   const abs = Math.abs(amount)
@@ -249,4 +255,9 @@ export function formatINR(amount) {
 export function formatPercent(value) {
   if (value === null || value === undefined || isNaN(value)) return '--'
   return `${(value * 100).toFixed(1)}%`
+}
+
+export function formatExact(amount) {
+  if (amount === null || amount === undefined || isNaN(amount)) return '--'
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(amount))
 }

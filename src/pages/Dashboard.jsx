@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, Truck, Megaphone, BarChart, ChevronDown, ChevronUp } from 'lucide-react'
+import React, { useState, useCallback } from 'react'
+import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, Truck, Megaphone, BarChart, ChevronDown, ChevronRight, CreditCard, Banknote, Smartphone } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
-import { calculateFullPnL, formatINR, formatPercent } from '../lib/profitEngine'
+import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
 
 function getDateRange(preset) {
   const today = new Date()
@@ -16,32 +16,54 @@ function getDateRange(preset) {
   }
 }
 
-function StatCard({ label, value, sub, icon: Icon, color = 'default' }) {
-  const colorMap = { default: 'text-accent', green: 'text-cash-green', red: 'text-cash-red', muted: 'text-brand-300' }
+function Stat({ label, value, sub, color = 'text-accent' }) {
   return (
     <div className="glass-card glass-card-hover p-5 fade-in">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-xs text-brand-400 uppercase tracking-wider font-medium">{label}</span>
-        {Icon && <Icon size={16} className="text-brand-500" />}
-      </div>
-      <p className={`text-2xl font-bold font-mono stat-glow ${colorMap[color]}`}>{value}</p>
+      <p className="text-xs text-brand-400 uppercase tracking-wider font-medium mb-2">{label}</p>
+      <p className={`text-2xl font-bold font-mono stat-glow ${color}`}>{value}</p>
       {sub && <p className="text-xs text-brand-400 mt-1.5">{sub}</p>}
     </div>
   )
 }
 
-function PnLRow({ label, expected, actual, indent = false, bold = false, negative = false }) {
-  const cls = bold ? 'font-bold' : ''
-  const sign = negative ? '-' : ''
+function PnLLine({ label, value, indent, bold, divider }) {
   return (
-    <div className={`flex items-center justify-between py-2 ${indent ? 'pl-6' : ''} ${bold ? 'border-t border-brand-800/30 pt-3' : ''}`}>
-      <span className={`text-sm ${bold ? 'text-accent' : 'text-brand-300'} ${cls}`}>{label}</span>
-      <div className="flex gap-8">
-        <span className={`font-mono text-sm ${cls} ${bold && expected > 0 ? 'text-cash-green' : bold && expected < 0 ? 'text-cash-red' : 'text-brand-200'}`}>
-          {sign}{formatINR(Math.abs(expected))}
-        </span>
-      </div>
+    <div className={`flex justify-between py-1.5 ${indent ? 'pl-6' : ''} ${bold ? 'border-t border-brand-800/30 pt-2 mt-1' : ''} ${divider ? 'mt-3' : ''}`}>
+      <span className={`text-sm ${bold ? 'text-accent font-semibold' : 'text-brand-300'}`}>{label}</span>
+      <span className={`font-mono text-sm ${bold ? (value.startsWith('-') ? 'text-cash-red font-bold' : 'text-cash-green font-bold') : 'text-brand-200'}`}>{value}</span>
     </div>
+  )
+}
+
+function ProductRow({ product, isExpanded, onToggle }) {
+  return (
+    <>
+      <tr onClick={onToggle} className="border-b border-brand-800/10 hover:bg-brand-900/20 transition-colors cursor-pointer">
+        <td className="py-3 px-4 flex items-center gap-2">
+          {isExpanded ? <ChevronDown size={14} className="text-brand-400" /> : <ChevronRight size={14} className="text-brand-400" />}
+          <span className="font-medium text-accent text-sm">{product.name}</span>
+        </td>
+        <td className="py-3 px-4 text-right font-mono text-xs text-brand-400">₹{product.vendorPriceBase}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">{product.prepaidUnits}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">{product.c2pUnits}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">{product.codUnits}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm font-bold text-accent">{product.totalUnits}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">₹{formatExact(product.revenue)}</td>
+        <td className="py-3 px-4 text-right font-mono text-sm text-brand-300">₹{formatExact(product.vendorCost)}</td>
+      </tr>
+      {isExpanded && product.variants.map(v => (
+        <tr key={v.name} className="bg-brand-950/30 border-b border-brand-800/5">
+          <td className="py-2 px-4 pl-10 text-xs text-brand-400">{v.name}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-500">₹{v.vendorPrice}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-400">{v.prepaidQty}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-400">{v.c2pQty}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-400">{v.codQty}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-300">{v.totalQty}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-400">₹{formatExact(v.revenue)}</td>
+          <td className="py-2 px-4 text-right font-mono text-xs text-brand-500">₹{formatExact(v.vendorCost)}</td>
+        </tr>
+      ))}
+    </>
   )
 }
 
@@ -51,27 +73,30 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [pnl, setPnl] = useState(null)
-  const [metaSpend, setMetaSpend] = useState(0)
+  const [apiMeta, setApiMeta] = useState(null)
   const [lastFetch, setLastFetch] = useState(null)
+  const [expandedProducts, setExpandedProducts] = useState({})
   const [showPnL, setShowPnL] = useState(true)
-  const [showProducts, setShowProducts] = useState(true)
 
   const dateRange = preset === 'custom' ? customRange : getDateRange(preset)
+
+  const toggleProduct = (name) => {
+    setExpandedProducts(prev => ({ ...prev, [name]: !prev[name] }))
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const shopify = await fetchShopifyOrders(dateRange.since, dateRange.until)
+      setApiMeta(shopify.meta)
 
-      let meta = null
       let spend = 0
       try {
-        meta = await fetchMetaSpend(dateRange.since, dateRange.until)
+        const meta = await fetchMetaSpend(dateRange.since, dateRange.until)
         spend = meta?.summary?.totalSpend || 0
       } catch (e) { console.warn('Meta unavailable:', e.message) }
 
-      setMetaSpend(spend)
       const result = calculateFullPnL(shopify.orders, spend)
       setPnl(result)
       setLastFetch(new Date())
@@ -91,23 +116,21 @@ export default function Dashboard() {
     { key: 'custom', label: 'Custom' },
   ]
 
+  const p = pnl // shorthand
+
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-5 fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-accent">Profit Dashboard</h2>
           <p className="text-sm text-brand-400 mt-1">
             {dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`}
+            {apiMeta && <span className="ml-2 text-brand-600">({apiMeta.rawOrderCount} orders from Shopify)</span>}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {lastFetch && (
-            <div className="flex items-center gap-2 text-xs text-brand-500">
-              <div className="pulse-dot" />
-              {lastFetch.toLocaleTimeString('en-IN')}
-            </div>
-          )}
+          {lastFetch && <div className="flex items-center gap-2 text-xs text-brand-500"><div className="pulse-dot" />{lastFetch.toLocaleTimeString('en-IN')}</div>}
           <button onClick={fetchData} disabled={loading} className="btn-primary flex items-center gap-2">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Fetching...' : 'Fetch Data'}
@@ -116,163 +139,136 @@ export default function Dashboard() {
       </div>
 
       {/* Date Range */}
-      <div className="glass-card p-4 flex items-center gap-2 flex-wrap">
+      <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
         <Calendar size={16} className="text-brand-400" />
-        {presets.map(p => (
-          <button key={p.key} onClick={() => setPreset(p.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${preset === p.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
-            {p.label}
+        {presets.map(pr => (
+          <button key={pr.key} onClick={() => setPreset(pr.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${preset === pr.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
+            {pr.label}
           </button>
         ))}
         {preset === 'custom' && (
           <div className="flex gap-2 ml-2">
-            <input type="date" value={customRange.since} onChange={e => setCustomRange(p => ({ ...p, since: e.target.value }))} className="input-field !w-40 !py-1.5 !text-xs" />
-            <input type="date" value={customRange.until} onChange={e => setCustomRange(p => ({ ...p, until: e.target.value }))} className="input-field !w-40 !py-1.5 !text-xs" />
+            <input type="date" value={customRange.since} onChange={e => setCustomRange(c => ({ ...c, since: e.target.value }))} className="input-field !w-40 !py-1.5 !text-xs" />
+            <input type="date" value={customRange.until} onChange={e => setCustomRange(c => ({ ...c, until: e.target.value }))} className="input-field !w-40 !py-1.5 !text-xs" />
           </div>
         )}
       </div>
 
       {error && (
-        <div className="glass-card p-4 border-cash-red/30 flex items-start gap-3 bg-red-900/10">
+        <div className="glass-card p-4 border-cash-red/30 bg-red-900/10 flex items-start gap-3">
           <AlertCircle size={18} className="text-cash-red mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-cash-red">Error</p>
-            <p className="text-xs text-brand-400 mt-1">{error}</p>
-          </div>
+          <div><p className="text-sm text-cash-red font-medium">Error</p><p className="text-xs text-brand-400 mt-1">{error}</p></div>
         </div>
       )}
 
-      {/* Top Stats */}
-      {pnl && (
+      {p && (
         <>
+          {/* Top Row: Key Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <Stat label="Orders" value={p.overview.activeOrders}
+              sub={`${p.overview.cancelledOrders > 0 ? p.overview.cancelledOrders + ' cancelled | ' : ''}Total: ${p.overview.totalOrders}`} />
+            <Stat label="Prepaid" value={p.overview.prepaidOrders}
+              sub={`${formatPercent(p.overview.prepaidRate)} rate`} color="text-cash-green" />
+            <Stat label="C2P (PPCOD)" value={p.overview.c2pOrders}
+              sub={`₹150 x ${p.overview.c2pOrders} = ₹${formatExact(p.overview.c2pOrders * 150)}`} color="text-yellow-400" />
+            <Stat label="COD" value={p.overview.codOrders}
+              sub={`50% delivery assumed`} color="text-brand-300" />
+            <Stat label="AOV" value={`₹${formatExact(p.metrics.aov)}`}
+              sub={`CPP: ₹${formatINR(p.metrics.cpp)}`} />
+          </div>
+
+          {/* Revenue + Profit Row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Expected Revenue" value={`₹${formatINR(pnl.revenue.expectedRevenue)}`}
-              sub={`Total: ₹${formatINR(pnl.revenue.totalRevenue)} | Prepaid: ₹${formatINR(pnl.revenue.prepaidRevenue)}`}
-              icon={DollarSign} />
-            <StatCard label="Meta Ad Spend" value={`₹${formatINR(pnl.expenses.metaAds)}`}
-              sub={`CPP: ₹${formatINR(pnl.metrics.cpp)} | ${formatPercent(pnl.metrics.adSpendRatio)} of rev`}
-              icon={Megaphone} color={pnl.metrics.adSpendRatio > 0.5 ? 'red' : 'muted'} />
-            <StatCard label="Expected Profit" value={`₹${formatINR(pnl.profit.expected)}`}
-              sub={`${formatPercent(pnl.profit.margin)} margin | ₹${formatINR(pnl.profit.perOrder)}/order`}
-              icon={pnl.profit.expected >= 0 ? TrendingUp : TrendingDown}
-              color={pnl.profit.expected >= 0 ? 'green' : 'red'} />
-            <StatCard label="Orders" value={pnl.overview.activeOrders}
-              sub={`Prepaid: ${pnl.overview.prepaidOrders} (${formatPercent(pnl.overview.prepaidRate)}) | COD: ${pnl.overview.codOrders}`}
-              icon={ShoppingBag} color="muted" />
+            <Stat label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`}
+              sub={`Cashfree: ₹${formatExact(p.revenue.cashfreeCollection)}`} />
+            <Stat label="Meta Spend" value={`₹${formatExact(p.expenses.metaAds)}`}
+              sub={`${formatPercent(p.metrics.adSpendRatio)} of expected rev`}
+              color={p.metrics.adSpendRatio > 0.55 ? 'text-cash-red' : 'text-brand-300'} />
+            <Stat label="Expected Profit" value={`₹${formatExact(p.profit.expected)}`}
+              sub={`${formatPercent(p.profit.margin)} margin | ₹${Math.round(p.profit.perOrder)}/order`}
+              color={p.profit.expected >= 0 ? 'text-cash-green' : 'text-cash-red'} />
+            <Stat label="Total COGS" value={`₹${formatExact(p.expenses.cogs)}`}
+              sub={`Logistics: ₹${formatExact(p.expenses.logistics)} | Fees: ₹${formatExact(p.expenses.totalFees)}`} />
           </div>
 
           {/* P&L Breakdown */}
           <div className="glass-card overflow-hidden">
             <button onClick={() => setShowPnL(!showPnL)}
               className="w-full px-5 py-4 flex items-center justify-between border-b border-brand-800/20 hover:bg-brand-900/20 transition-colors">
-              <h3 className="text-sm font-semibold text-accent">P&L Breakdown (Expected)</h3>
-              {showPnL ? <ChevronUp size={16} className="text-brand-400" /> : <ChevronDown size={16} className="text-brand-400" />}
+              <h3 className="text-sm font-semibold text-accent">P&L Statement (Expected)</h3>
+              <ChevronDown size={16} className={`text-brand-400 transition-transform ${showPnL ? 'rotate-180' : ''}`} />
             </button>
             {showPnL && (
               <div className="px-5 py-3">
-                <PnLRow label="Prepaid Revenue (Cashfree)" expected={pnl.revenue.prepaidRevenue} />
-                <PnLRow label="COD Revenue (Expected @ 50% delivery)" expected={pnl.revenue.codRevenue * 0.5} />
-                <PnLRow label="Total Expected Revenue" expected={pnl.revenue.expectedRevenue} bold />
+                <div className="text-xs text-brand-500 uppercase tracking-wider mb-2">Income</div>
+                <PnLLine label="Cashfree (Prepaid collections)" value={`₹${formatExact(p.revenue.prepaidRevenue)}`} indent />
+                <PnLLine label={`C2P upfront (${p.overview.c2pOrders} orders x ₹150)`} value={`₹${formatExact(p.overview.c2pOrders * 150)}`} indent />
+                <PnLLine label={`C2P COD portion (expected @ 50%)`} value={`₹${formatExact(p.revenue.c2pExpected - p.overview.c2pOrders * 150)}`} indent />
+                <PnLLine label={`COD revenue (expected @ 50%)`} value={`₹${formatExact(p.revenue.codExpected)}`} indent />
+                <PnLLine label="Total Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} bold />
 
-                <div className="mt-4 mb-2">
-                  <span className="text-xs text-brand-500 uppercase tracking-wider">Expenses</span>
-                </div>
-                <PnLRow label="Meta Ads" expected={pnl.expenses.metaAds} indent negative />
-                <PnLRow label="COGS (Vendor Cost)" expected={pnl.expenses.cogs} indent negative />
-                <PnLRow label="Boxes" expected={pnl.expenses.boxes} indent negative />
-                <PnLRow label="Warranty Card" expected={pnl.expenses.warrantyCard} indent negative />
-                <PnLRow label="Free Ring" expected={pnl.expenses.freeRing} indent negative />
-                <PnLRow label="Packing Bags" expected={pnl.expenses.packingBags} indent negative />
-                <PnLRow label="Shipping" expected={pnl.expenses.shipping} indent negative />
-                <PnLRow label="Cashfree Fees" expected={pnl.expenses.cashfree} indent negative />
-                <PnLRow label="Engage" expected={pnl.expenses.engage} indent negative />
-                <PnLRow label="Checkout (Fastrr)" expected={pnl.expenses.checkout} indent negative />
-                <PnLRow label="Total Expenses" expected={pnl.expenses.total} bold negative />
+                <div className="text-xs text-brand-500 uppercase tracking-wider mt-4 mb-2">Expenses</div>
+                <PnLLine label="Meta Ads" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
+                <PnLLine label="COGS (Vendor Cost)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
+                <PnLLine label="Boxes" value={`-₹${formatExact(p.expenses.boxes)}`} indent />
+                <PnLLine label="Warranty Card" value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
+                <PnLLine label="Free Ring" value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
+                <PnLLine label="Packing Bags" value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
+                <PnLLine label="Shipping" value={`-₹${formatExact(p.expenses.shipping)}`} indent />
+                <PnLLine label="Cashfree Fees (1.34%)" value={`-₹${formatExact(p.expenses.cashfree)}`} indent />
+                <PnLLine label="Engage" value={`-₹${formatExact(p.expenses.engage)}`} indent />
+                <PnLLine label="Checkout (Fastrr)" value={`-₹${formatExact(p.expenses.checkout)}`} indent />
+                <PnLLine label="Total Expenses" value={`-₹${formatExact(p.expenses.total)}`} bold />
 
-                <div className="mt-2" />
-                <PnLRow label="Expected Profit" expected={pnl.profit.expected} bold />
-                <PnLRow label="Profit Margin" expected={0} />
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-sm text-brand-300">Profit %</span>
-                  <span className={`font-mono text-sm font-bold ${pnl.profit.margin >= 0.2 ? 'text-cash-green' : pnl.profit.margin >= 0.1 ? 'text-yellow-400' : 'text-cash-red'}`}>
-                    {formatPercent(pnl.profit.margin)}
-                  </span>
-                </div>
+                <div className="mt-3" />
+                <PnLLine label="EXPECTED PROFIT" value={`${p.profit.expected >= 0 ? '' : '-'}₹${formatExact(Math.abs(p.profit.expected))}`} bold />
+                <PnLLine label="Profit %" value={formatPercent(p.profit.margin)} />
+                <PnLLine label="Per Order Profit" value={`₹${Math.round(p.profit.perOrder)}`} />
               </div>
             )}
           </div>
 
           {/* Product Breakdown */}
           <div className="glass-card overflow-hidden">
-            <button onClick={() => setShowProducts(!showProducts)}
-              className="w-full px-5 py-4 flex items-center justify-between border-b border-brand-800/20 hover:bg-brand-900/20 transition-colors">
-              <h3 className="text-sm font-semibold text-accent">Product Breakdown ({pnl.products.length} products)</h3>
-              {showProducts ? <ChevronUp size={16} className="text-brand-400" /> : <ChevronDown size={16} className="text-brand-400" />}
-            </button>
-            {showProducts && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-brand-800/30 text-xs text-brand-400 uppercase tracking-wider">
-                      <th className="py-3 px-4">Product</th>
-                      <th className="py-3 px-4 text-right">Vendor ₹</th>
-                      <th className="py-3 px-4 text-right">Prepaid</th>
-                      <th className="py-3 px-4 text-right">COD</th>
-                      <th className="py-3 px-4 text-right">Total Units</th>
-                      <th className="py-3 px-4 text-right">Revenue</th>
-                      <th className="py-3 px-4 text-right">Vendor Cost</th>
-                      <th className="py-3 px-4 text-right">Expected Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pnl.products.map(p => (
-                      <tr key={p.name} className="border-b border-brand-800/10 hover:bg-brand-900/20 transition-colors">
-                        <td className="py-3 px-4 font-medium text-accent text-sm">{p.name}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-300">₹{p.vendorPrice}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">{p.prepaidQty}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">{p.codQty}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200 font-bold">{p.totalQty}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-200">₹{formatINR(p.totalRevenue)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-300">₹{formatINR(p.totalVendorCost)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-brand-300">₹{formatINR(p.expectedRate)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-brand-700/30 bg-brand-950/30">
-                      <td className="py-3 px-4 font-bold text-accent text-sm">TOTAL</td>
-                      <td className="py-3 px-4"></td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-200">
-                        {pnl.products.reduce((s, p) => s + p.prepaidQty, 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-200">
-                        {pnl.products.reduce((s, p) => s + p.codQty, 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-200">
-                        {pnl.products.reduce((s, p) => s + p.totalQty, 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-accent">
-                        ₹{formatINR(pnl.products.reduce((s, p) => s + p.totalRevenue, 0))}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-300">
-                        ₹{formatINR(pnl.products.reduce((s, p) => s + p.totalVendorCost, 0))}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-300">
-                        ₹{formatINR(pnl.products.reduce((s, p) => s + p.expectedRate, 0))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="AOV" value={`₹${formatINR(pnl.metrics.aov)}`} color="muted" />
-            <StatCard label="Total COGS" value={`₹${formatINR(pnl.expenses.cogs)}`} icon={Truck} color="muted" />
-            <StatCard label="Logistics" value={`₹${formatINR(pnl.expenses.logistics)}`} color="muted" />
-            <StatCard label="Fees" value={`₹${formatINR(pnl.expenses.totalFees)}`} color="muted" />
+            <div className="px-5 py-4 border-b border-brand-800/20">
+              <h3 className="text-sm font-semibold text-accent">Product Breakdown ({p.products.length} products) -- click to expand</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-brand-800/30 text-xs text-brand-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Product</th>
+                    <th className="py-3 px-4 text-right">Vendor ₹</th>
+                    <th className="py-3 px-4 text-right">Prepaid</th>
+                    <th className="py-3 px-4 text-right">C2P</th>
+                    <th className="py-3 px-4 text-right">COD</th>
+                    <th className="py-3 px-4 text-right">Total</th>
+                    <th className="py-3 px-4 text-right">Revenue</th>
+                    <th className="py-3 px-4 text-right">Vendor Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.products.map(prod => (
+                    <ProductRow key={prod.name} product={prod}
+                      isExpanded={!!expandedProducts[prod.name]}
+                      onToggle={() => toggleProduct(prod.name)} />
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-brand-700/50 bg-brand-950/40">
+                    <td className="py-3 px-4 font-bold text-accent text-sm">TOTAL</td>
+                    <td></td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-200">{p.products.reduce((s, pr) => s + pr.prepaidUnits, 0)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-yellow-400">{p.products.reduce((s, pr) => s + pr.c2pUnits, 0)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-300">{p.products.reduce((s, pr) => s + pr.codUnits, 0)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-accent">{p.products.reduce((s, pr) => s + pr.totalUnits, 0)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-accent">₹{formatExact(p.products.reduce((s, pr) => s + pr.revenue, 0))}</td>
+                    <td className="py-3 px-4 text-right font-mono text-sm font-bold text-brand-300">₹{formatExact(p.products.reduce((s, pr) => s + pr.vendorCost, 0))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -282,9 +278,7 @@ export default function Dashboard() {
         <div className="glass-card p-12 text-center">
           <BarChart size={48} className="text-brand-600 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">No data yet</h3>
-          <p className="text-sm text-brand-400 max-w-md mx-auto">
-            Select a date range and click Fetch Data. Vendor prices are pre-loaded from your Validation sheet.
-          </p>
+          <p className="text-sm text-brand-400 max-w-md mx-auto">Select a date range and hit Fetch Data. All vendor prices are pre-loaded.</p>
         </div>
       )}
     </div>
