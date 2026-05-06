@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { BarChart3, Package, Settings, Zap } from 'lucide-react'
+import { BarChart, Package, Settings, Zap } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import SettingsPage from './pages/Settings'
@@ -27,7 +27,7 @@ function Sidebar() {
 
       <nav className="flex-1 px-3 space-y-1 mt-4">
         <NavLink to="/" className={linkClass} end>
-          <BarChart3 size={18} />
+          <BarChart size={18} />
           Dashboard
         </NavLink>
         <NavLink to="/products" className={linkClass}>

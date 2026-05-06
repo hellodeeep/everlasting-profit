@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, IndianRupee, ShoppingBag, Truck, Megaphone } from 'lucide-react'
+import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, Truck, Megaphone, BarChart } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 import { getProducts } from '../lib/supabase'
 import { calculateProfit, calculateAggregate, formatINR, formatPercent } from '../lib/profitEngine'
@@ -240,7 +240,7 @@ export default function Dashboard() {
             label="Net Revenue"
             value={`₹${formatINR(aggregate.netRevenue)}`}
             sub={`${aggregate.totalDelivered} units delivered`}
-            icon={IndianRupee}
+            icon={DollarSign}
           />
           <StatCard
             label="Ad Spend"
@@ -358,7 +358,7 @@ export default function Dashboard() {
       {/* Empty State */}
       {!shopifyData && !metaData && !loading && (
         <div className="glass-card p-12 text-center">
-          <BarChart3 size={48} className="text-brand-600 mx-auto mb-4" />
+          <BarChart size={48} className="text-brand-600 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">No data yet</h3>
           <p className="text-sm text-brand-400 max-w-md mx-auto">
             Add your products with COGS in the Products tab, configure your API keys in Settings, then hit Fetch Data.
