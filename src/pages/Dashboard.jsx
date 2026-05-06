@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, BarChart, ChevronDown, ChevronRight, X, Filter } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
@@ -40,11 +40,35 @@ export default function Dashboard() {
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [rawData, setRawData] = useState(null) // { orders, metaSpend }
+  const [rawData, setRawData] = useState(null)
   const [lastFetch, setLastFetch] = useState(null)
   const [productFilter, setProductFilter] = useState(null)
   const [showPnL, setShowPnL] = useState(false)
   const [expandedProducts, setExpandedProducts] = useState({})
+
+  // Load cached data on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('everlasting_dashboard')
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed.rawData) setRawData(parsed.rawData)
+        if (parsed.lastFetch) setLastFetch(new Date(parsed.lastFetch))
+        if (parsed.preset) setPreset(parsed.preset)
+      }
+    } catch (e) { console.warn('Cache load failed:', e) }
+  }, [])
+
+  // Save to cache whenever rawData changes
+  useEffect(() => {
+    if (rawData) {
+      try {
+        localStorage.setItem('everlasting_dashboard', JSON.stringify({
+          rawData, lastFetch: lastFetch?.toISOString(), preset,
+        }))
+      } catch (e) { console.warn('Cache save failed:', e) }
+    }
+  }, [rawData, lastFetch, preset])
 
   const dateRange = preset === 'custom' ? customRange : getDateRange(preset)
 
