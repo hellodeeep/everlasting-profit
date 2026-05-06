@@ -105,12 +105,20 @@ export default function Dashboard() {
     setLoading(true)
     setError(null)
     try {
-      const [shopify, meta] = await Promise.all([
-        fetchShopifyOrders(dateRange.since, dateRange.until),
-        fetchMetaSpend(dateRange.since, dateRange.until),
-      ])
+      // Fetch Shopify (required)
+      const shopify = await fetchShopifyOrders(dateRange.since, dateRange.until)
       setShopifyData(shopify)
-      setMetaData(meta)
+
+      // Fetch Meta (optional - don't fail if not configured)
+      let meta = { summary: { totalSpend: 0, totalPurchases: 0, avgCPP: 0, totalImpressions: 0, totalClicks: 0, ctr: 0 }, campaigns: [] }
+      try {
+        meta = await fetchMetaSpend(dateRange.since, dateRange.until)
+        setMetaData(meta)
+      } catch (metaErr) {
+        console.warn('Meta data unavailable:', metaErr.message)
+        setMetaData(null)
+      }
+
       setLastFetch(new Date())
 
       // Match Shopify products with our COGS products and calculate profit
