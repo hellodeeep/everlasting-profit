@@ -1,185 +1,249 @@
-// Profit Engine - mirrors the Expected Profit Tracker spreadsheet logic
-// All calculations are pure functions, no side effects
+// Profit Engine v2 - Order-level processing
+// Mirrors the manual Excel sheet logic exactly
+
+import { findVendorPrice, detectMultiplier, isPackProduct, LOGISTICS_COSTS, FEE_RATES } from './vendorPrices'
 
 /**
- * Calculate profit for a single product given Shopify + Meta data + COGS
- *
- * @param {Object} params
- * @param {Object} params.shopify - Shopify data for this product
- *   { totalQty, prepaidQty, codQty, prepaidRevenue, codRevenue }
- * @param {Object} params.cogs - COGS breakdown
- *   { product, box, card, packingBag, shipping, prepaidRing, codFee }
- * @param {number} params.adSpend - Allocated ad spend for this product
- * @param {number} params.softwarePercent - Software expense as % of revenue (default 5%)
- * @param {number} params.deliveryRate - Delivery rate for COD (default 0.7)
- * @param {number} params.c2pPayment - C2P partial payment amount (default 150)
- * @param {Object} params.sellingPrice - { prepaid, cod }
- * @returns {Object} Full P&L breakdown
+ * Normalize a product title into a "family" name
+ * "Name Necklace - Gold / Buy 2 @ 1899" -> "Name Necklace"
+ * "Snake Anklet - Pack of 2 ( Both Leg ) / Silver" -> "Snake Anklet"
+ * "Premium Gift Box with Gift Wrap" -> "Premium Gift Box"
  */
-export function calculateProfit({
-  shopify = {},
-  cogs = {},
-  adSpend = 0,
-  softwarePercent = 0.05,
-  deliveryRate = 0.7,
-  c2pPayment = 150,
-  sellingPrice = { prepaid: 0, cod: 0 },
-}) {
-  // --- Unit Economics ---
-  const productCost = cogs.product || 0
-  const box = cogs.box || 0
-  const card = cogs.card || 0
-  const packingBag = cogs.packingBag || 0
-  const shipping = cogs.shipping || 0
-  const prepaidRing = cogs.prepaidRing || 0
-  const codFee = cogs.codFee || 0
+export function getProductFamily(title) {
+  let name = title
+    .replace(/\s*-\s*(Gold|Silver|Rose Gold|Maroon|Gullabi|Blue|Black|White|Red|Pink|Green|Purple).*$/i, '')
+    .replace(/\s*\/\s*(Buy|Pack|Gold|Silver|Rose|Single|Both|Male|Female|R|One|Two).*$/i, '')
+    .replace(/\s*-\s*(Pack of|Buy).*$/i, '')
+    .replace(/\s+with\s+(Gift Wrap|Message Card|Personalised).*$/i, '')
+    .replace(/\s*\(.*?\)\s*/g, '')
+    .trim()
 
-  const totalBase = productCost + box + card + packingBag + shipping
-  const prepaidCOGS = totalBase + prepaidRing
-  const codCOGS = totalBase + codFee
+  // Normalize known families
+  const lower = name.toLowerCase()
+  if (lower.includes('premium gift box')) return 'Premium Gift Box'
+  if (lower.includes('name necklace') && !lower.includes('arabic') && !lower.includes('flower') && !lower.includes('queen') && !lower.includes('angel') && !lower.includes('fairy') && !lower.includes('butterfly') && !lower.includes('cross') && !lower.includes('mangalsutra') && !lower.includes('hindi') && !lower.includes('punjabi') && !lower.includes('indic') && !lower.includes('double') && !lower.includes('couple') && !lower.includes('signature') && !lower.includes('fimo') && !lower.includes('photo')) return 'Name Necklace'
 
-  const prepaidProfitPerUnit = sellingPrice.prepaid - prepaidCOGS
-  const codProfitPerUnit = sellingPrice.cod - codCOGS
-
-  // --- Order Metrics (from Shopify) ---
-  const totalOrders = shopify.totalQty || 0
-  const prepaidOrders = shopify.prepaidQty || 0
-  const codOrders = shopify.codQty || 0
-
-  // Estimated delivered COD (using delivery rate)
-  const codDelivered = Math.floor(codOrders * deliveryRate)
-  const totalDelivered = prepaidOrders + codDelivered
-
-  // --- Revenue ---
-  const prepaidRevenue = shopify.prepaidRevenue || (prepaidOrders * sellingPrice.prepaid)
-  const codRevenue = codDelivered * sellingPrice.cod
-  const netRevenue = prepaidRevenue + codRevenue
-
-  // --- Expenses ---
-  const totalCOG = (prepaidOrders * prepaidCOGS) + (codOrders * codCOGS)
-  const softwareExp = netRevenue * softwarePercent
-  const totalExpense = totalCOG + adSpend + softwareExp
-
-  // --- Profit ---
-  const grossProfit = netRevenue - totalCOG
-  const netProfit = netRevenue - totalExpense
-
-  // --- Ratios ---
-  const grossMargin = netRevenue > 0 ? grossProfit / netRevenue : 0
-  const netMargin = netRevenue > 0 ? netProfit / netRevenue : 0
-  const adSpendRatio = netRevenue > 0 ? adSpend / netRevenue : 0
-  const prepaidRate = totalOrders > 0 ? prepaidOrders / totalOrders : 0
-  const rtoRate = 1 - deliveryRate
-
-  // --- Per Order Metrics ---
-  const cpp = totalOrders > 0 ? adSpend / totalOrders : 0
-  const cppWithoutGST = cpp / 1.18
-  const targetCAP = sellingPrice.prepaid > 0 ? cpp / sellingPrice.prepaid : 0
-
-  // --- Cash Flow ---
-  const prepaidCashIn = prepaidRevenue
-  const codCashIn = codDelivered * sellingPrice.cod
-
-  return {
-    unitEconomics: {
-      totalBase,
-      prepaidCOGS,
-      codCOGS,
-      prepaidProfitPerUnit,
-      codProfitPerUnit,
-    },
-    orders: {
-      totalOrders,
-      prepaidOrders,
-      codOrders,
-      codDelivered,
-      totalDelivered,
-      prepaidRate,
-      rtoRate,
-    },
-    revenue: {
-      prepaidRevenue,
-      codRevenue,
-      netRevenue,
-    },
-    expenses: {
-      totalCOG,
-      adSpend,
-      softwareExp,
-      totalExpense,
-    },
-    profit: {
-      grossProfit,
-      netProfit,
-      grossMargin,
-      netMargin,
-    },
-    metrics: {
-      adSpendRatio,
-      cpp,
-      cppWithoutGST,
-      targetCAP,
-    },
-    cashFlow: {
-      prepaidCashIn,
-      codCashIn,
-      totalCashIn: prepaidCashIn + codCashIn,
-    },
-  }
+  return name
 }
 
 /**
- * Calculate aggregate profit across all products
+ * Process a single order and calculate its expected profit contribution
  */
-export function calculateAggregate(productResults) {
-  const agg = {
-    totalOrders: 0,
-    totalDelivered: 0,
-    netRevenue: 0,
-    totalCOG: 0,
-    totalAdSpend: 0,
-    totalSoftwareExp: 0,
-    totalExpense: 0,
-    grossProfit: 0,
-    netProfit: 0,
-    prepaidCashIn: 0,
-    codCashIn: 0,
+export function processOrder(order, customVendorPrices = {}) {
+  if (order.cancelled) {
+    return {
+      orderId: order.id,
+      cancelled: true,
+      paymentMethod: order.paymentMethod,
+      revenue: 0,
+      expectedRevenue: 0,
+      totalCOGS: 0,
+      logistics: 0,
+      lineItems: [],
+    }
   }
 
-  productResults.forEach(r => {
-    agg.totalOrders += r.orders.totalOrders
-    agg.totalDelivered += r.orders.totalDelivered
-    agg.netRevenue += r.revenue.netRevenue
-    agg.totalCOG += r.expenses.totalCOG
-    agg.totalAdSpend += r.expenses.adSpend
-    agg.totalSoftwareExp += r.expenses.softwareExp
-    agg.totalExpense += r.expenses.totalExpense
-    agg.grossProfit += r.profit.grossProfit
-    agg.netProfit += r.profit.netProfit
-    agg.prepaidCashIn += r.cashFlow.prepaidCashIn
-    agg.codCashIn += r.cashFlow.codCashIn
+  const isPrepaid = order.paymentMethod === 'prepaid'
+
+  // Process each line item
+  const processedItems = order.lineItems.map(item => {
+    const vendorPrice = findVendorPrice(item.title, customVendorPrices)
+    const multiplier = detectMultiplier(item.title, item.variantTitle)
+    const isPack = isPackProduct(item.title)
+
+    // For "Pack of 2 (Both Leg)" products, vendor price is already for the pack
+    let unitVendorCost = vendorPrice
+    if (isPack) {
+      unitVendorCost = vendorPrice * 2 // e.g., Snake Anklet 35*2 = 70 for pack of 2
+    }
+
+    // For "Buy 2 @ 1899" - multiply vendor cost by buy quantity
+    const totalVendorCost = unitVendorCost * multiplier * item.quantity
+
+    return {
+      title: item.title,
+      variantTitle: item.variantTitle,
+      family: getProductFamily(item.title),
+      quantity: item.quantity,
+      multiplier,
+      sellingPrice: item.price,
+      lineTotal: item.lineTotal,
+      vendorPricePerUnit: vendorPrice,
+      totalVendorCost,
+      isGiftBox: item.title.toLowerCase().includes('premium gift box'),
+    }
   })
 
-  agg.grossMargin = agg.netRevenue > 0 ? agg.grossProfit / agg.netRevenue : 0
-  agg.netMargin = agg.netRevenue > 0 ? agg.netProfit / agg.netRevenue : 0
-  agg.adSpendRatio = agg.netRevenue > 0 ? agg.totalAdSpend / agg.netRevenue : 0
-  agg.totalCashIn = agg.prepaidCashIn + agg.codCashIn
+  // Logistics: 1 shipment per order, regardless of items
+  const hasNecklace = processedItems.some(i =>
+    i.title.toLowerCase().includes('necklace') && !i.isGiftBox
+  )
+  const logisticsCost =
+    LOGISTICS_COSTS.box +
+    LOGISTICS_COSTS.warrantyCard +
+    LOGISTICS_COSTS.packingBag +
+    LOGISTICS_COSTS.shipping +
+    (hasNecklace ? LOGISTICS_COSTS.freeRing : 0)
 
-  return agg
+  const totalCOGS = processedItems.reduce((s, i) => s + i.totalVendorCost, 0)
+
+  // Revenue calculation
+  // Prepaid: full order total
+  // COD Expected: order total * 0.5 (50% delivery assumption from your sheet)
+  const orderRevenue = order.totalPrice
+  const expectedRevenue = isPrepaid ? orderRevenue : orderRevenue * 0.5
+
+  // Fees on prepaid revenue
+  const cashfreeFee = isPrepaid ? orderRevenue * FEE_RATES.cashfree : 0
+  const engageFee = isPrepaid ? orderRevenue * FEE_RATES.engage : 0
+  const checkoutFee = isPrepaid ? orderRevenue * FEE_RATES.checkout : 0
+  const totalFees = cashfreeFee + engageFee + checkoutFee
+
+  // Expected profit for this order (before ad spend)
+  const totalExpense = totalCOGS + logisticsCost + totalFees
+  const expectedProfit = expectedRevenue - totalExpense
+
+  return {
+    orderId: order.id,
+    cancelled: false,
+    paymentMethod: order.paymentMethod,
+    revenue: orderRevenue,
+    expectedRevenue,
+    totalCOGS,
+    logistics: logisticsCost,
+    fees: totalFees,
+    cashfreeFee,
+    engageFee,
+    checkoutFee,
+    totalExpense,
+    expectedProfit,
+    lineItems: processedItems,
+  }
 }
 
 /**
- * Format currency in INR
+ * Process all orders and generate full P&L
  */
-export function formatINR(amount, decimals = 0) {
+export function calculateFullPnL(orders, metaSpend = 0, customVendorPrices = {}) {
+  const processed = orders.map(o => processOrder(o, customVendorPrices))
+  const active = processed.filter(o => !o.cancelled)
+  const prepaid = active.filter(o => o.paymentMethod === 'prepaid')
+  const cod = active.filter(o => o.paymentMethod === 'cod')
+
+  // Overall P&L
+  const totalRevenue = active.reduce((s, o) => s + o.revenue, 0)
+  const expectedRevenue = active.reduce((s, o) => s + o.expectedRevenue, 0)
+  const totalCOGS = active.reduce((s, o) => s + o.totalCOGS, 0)
+  const totalLogistics = active.reduce((s, o) => s + o.logistics, 0)
+  const totalFees = active.reduce((s, o) => s + o.fees, 0)
+  const totalExpenseBeforeAds = totalCOGS + totalLogistics + totalFees
+  const totalExpense = totalExpenseBeforeAds + metaSpend
+  const expectedProfit = expectedRevenue - totalExpense
+  const actualRevenuePrepaid = prepaid.reduce((s, o) => s + o.revenue, 0)
+
+  // Product-wise breakdown
+  const productMap = {}
+  active.forEach(order => {
+    order.lineItems.forEach(item => {
+      const family = item.family
+      if (!productMap[family]) {
+        productMap[family] = {
+          name: family,
+          vendorPrice: item.vendorPricePerUnit,
+          prepaidQty: 0,
+          codQty: 0,
+          totalQty: 0,
+          totalUnits: 0, // accounting for multipliers
+          prepaidRevenue: 0,
+          codRevenue: 0,
+          totalRevenue: 0,
+          totalVendorCost: 0,
+          expectedRate: 0, // vendor_cost * (prepaid + cod/2)
+          orderCount: 0,
+        }
+      }
+      const p = productMap[family]
+      const qty = item.quantity
+      const units = qty * item.multiplier
+
+      if (order.paymentMethod === 'prepaid') {
+        p.prepaidQty += units
+      } else {
+        p.codQty += units
+      }
+      p.totalQty += units
+      p.totalUnits += units
+      p.totalRevenue += item.lineTotal
+      if (order.paymentMethod === 'prepaid') p.prepaidRevenue += item.lineTotal
+      else p.codRevenue += item.lineTotal
+      p.totalVendorCost += item.totalVendorCost
+      p.orderCount++
+    })
+  })
+
+  // Calculate expected rates per product (vendor_cost * (prepaid + cod/2))
+  Object.values(productMap).forEach(p => {
+    p.expectedRate = p.vendorPrice * (p.prepaidQty + p.codQty / 2)
+  })
+
+  // Sort by total revenue descending
+  const products = Object.values(productMap).sort((a, b) => b.totalRevenue - a.totalRevenue)
+
+  return {
+    overview: {
+      totalOrders: orders.length,
+      activeOrders: active.length,
+      cancelledOrders: orders.length - active.length,
+      prepaidOrders: prepaid.length,
+      codOrders: cod.length,
+      prepaidRate: active.length > 0 ? prepaid.length / active.length : 0,
+    },
+    revenue: {
+      totalRevenue,
+      expectedRevenue,
+      prepaidRevenue: actualRevenuePrepaid,
+      codRevenue: cod.reduce((s, o) => s + o.revenue, 0),
+    },
+    expenses: {
+      metaAds: metaSpend,
+      cogs: totalCOGS,
+      logistics: totalLogistics,
+      boxes: active.length * LOGISTICS_COSTS.box,
+      warrantyCard: active.length * LOGISTICS_COSTS.warrantyCard,
+      freeRing: active.filter(o => o.lineItems.some(i => i.title.toLowerCase().includes('necklace'))).length * LOGISTICS_COSTS.freeRing,
+      packingBags: active.length * LOGISTICS_COSTS.packingBag,
+      shipping: active.length * LOGISTICS_COSTS.shipping,
+      cashfree: prepaid.reduce((s, o) => s + o.cashfreeFee, 0),
+      engage: prepaid.reduce((s, o) => s + o.engageFee, 0),
+      checkout: prepaid.reduce((s, o) => s + o.checkoutFee, 0),
+      totalFees,
+      totalBeforeAds: totalExpenseBeforeAds,
+      total: totalExpense,
+    },
+    profit: {
+      expected: expectedProfit,
+      margin: expectedRevenue > 0 ? expectedProfit / expectedRevenue : 0,
+      perOrder: active.length > 0 ? expectedProfit / active.length : 0,
+    },
+    metrics: {
+      cpp: active.length > 0 ? metaSpend / active.length : 0,
+      aov: active.length > 0 ? totalRevenue / active.length : 0,
+      adSpendRatio: expectedRevenue > 0 ? metaSpend / expectedRevenue : 0,
+    },
+    products,
+    processedOrders: processed,
+  }
+}
+
+// Formatting helpers
+export function formatINR(amount) {
   if (amount === null || amount === undefined || isNaN(amount)) return '--'
   const abs = Math.abs(amount)
   const sign = amount < 0 ? '-' : ''
-
   if (abs >= 10000000) return `${sign}${(abs / 10000000).toFixed(2)} Cr`
   if (abs >= 100000) return `${sign}${(abs / 100000).toFixed(2)} L`
   if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(1)}K`
-  return `${sign}${abs.toFixed(decimals)}`
+  return `${sign}${Math.round(abs)}`
 }
 
 export function formatPercent(value) {
