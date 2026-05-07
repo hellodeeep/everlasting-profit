@@ -239,11 +239,11 @@ export default function Dashboard() {
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
                 <PnLLine label="COGS (Vendor)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
-                <PnLLine label="Boxes" value={`-₹${formatExact(p.expenses.boxes)}`} indent />
-                <PnLLine label="Warranty Card" value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
-                <PnLLine label="Free Ring" value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
-                <PnLLine label="Packing Bags" value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
-                <PnLLine label="Shipping" value={`-₹${formatExact(p.expenses.shipping)}`} indent />
+                <PnLLine label={`Boxes (${p.overview.totalOrders || allOrders?.length || 0} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
+                <PnLLine label={`Warranty Card (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
+                <PnLLine label={`Free Ring (${p.overview.prepaidOrders} prepaid x ₹17.51)`} value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
+                <PnLLine label={`Packing Bags (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
+                <PnLLine label={`Shipping (${p.overview.prepaidOrders}x₹60 + ${p.overview.codC2pOrders || 0}x₹100@70%)`} value={`-₹${formatExact(p.expenses.shipping)}`} indent />
                 <PnLLine label="Cashfree (1.34%)" value={`-₹${formatExact(p.expenses.cashfree)}`} indent />
                 <PnLLine label="Engage" value={`-₹${formatExact(p.expenses.engage)}`} indent />
                 <PnLLine label="Checkout (Fastrr)" value={`-₹${formatExact(p.expenses.checkout)}`} indent />

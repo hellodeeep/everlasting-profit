@@ -1,180 +1,90 @@
-// Vendor Price Lookup - sourced from Validation sheet
-// Key = lowercase pattern, Value = vendor cost PER UNIT (single piece)
-
+// Default vendor prices from Validation sheet
 export const DEFAULT_VENDOR_PRICES = {
   "name necklace": 115,
-  "double name necklace": 150,
-  "bar necklace": 120,
-  "reversible tag necklace": 180,
-  "personalised cuff bracelet": 72,
-  "cuff bracelet": 72,
-  "tree of life necklace": 200,
-  "cross name necklace": 95,
-  "fimo beads": 180,
-  "name bracelet": 220,
-  "indic name necklace": 95,
-  "flower name necklace": 115,
-  "hindi name necklace": 95,
-  "punjabi name necklace": 95,
   "arabic name necklace": 115,
-  "signature couple heart": 160,
-  "11:11 necklace": 80,  
-  "butterfly necklace": 150,
-  "dainty evil eye": 32,
-  "diamond studded initial": 375,
-  "double heart necklace": 30,
-  "emerald stone necklace": 218,
-  "evil eye necklace": 32,
-  "lock pendant": 115,
-  "golden heart necklace": 18,
-  "golden teddy necklace": 512,
-  "heart & stone": 230,
-  "heart stone necklace": 230,
-  "initial necklace": 20,
-  "linked circle": 167,
-  "lock and key": 260,
-  "moon necklace": 167,
-  "pearl teddy": 218,
-  "saturn necklace": 32,
-  "star pendant": 167,
-  "statement rose": 218,
-  "sweetheart necklace": 197,
-  "yin and yang": 27,
-  "name ring": 180,
-  "paw name ring": 180,
-  "heart name ring": 180,
-  "butterfly name ring": 180,
-  "couple name ring": 180,
-  "butterfly heart couple": 160,
-  "couple name necklace": 160,
-  "5 in 1 gift box": 600,
-  "lucky clover necklace": 80,
-  "minimal rose necklace": 100,
-  "snake anklet": 35,
-  "minimal snake anklet": 14,
-  "round snake anklet": 20,
-  "eternal heart necklace": 120,
-  "eternal love heart": 120,
-  "perfume": 390,
-  "floral elegance anklet": 175,
-  "hug necklace": 120,
-  "radiant mangalsutra": 150,
-  "enchanted heartbeat anklet": 225,
-  "everlasting prism anklet": 225,
-  "eternal bond mangalsutra": 150,
-  "majestic aura mangalsutra": 105,
-  "luxe noir mangalsutra": 130,
-  "elegant mangalsutra": 130,
-  "emerald heart necklace": 130,
-  "fairy wings set": 205,
-  "luxe cylinder pendant": 180,
-  "butterfly name necklace": 150,
-  "enchante": 160,
-  "fairy wings mangalsutra": 170,
-  "forever love bracelet": 30,
-  "obsidian sparkle": 155,
-  "floral mangalsutra": 155,
-  "butterfly anklet": 31,
-  "premium gift box": 22,
-  "personalised car keychain": 75,
-  "personalised bike keychain": 75,
-  "retro keychain": 95,
-  "bowfinity bracelet": 104,
-  "leafora bracelet": 104,
-  "swan love bracelet": 104,
-  "butterfly bracelet": 31,
-  "cute pearly bracelet": 15,
-  "interlinked diamond bracelet": 130,
-  "diamond tennis bracelet": 193,
-  "cupid heart bracelet": 104,
-  "elegant bracelet": 105,
-  "dual heart bracelet": 105,
-  "daisy bracelet": 35,
-  "daisy anklet": 35,
-  "twinkling watch": 112,
-  "morse code jewellery": 47,
-  "morse code anklet": 47,
-  "kashmiri bangles": 230,
+  "flower name necklace": 115,
   "queen name necklace": 115,
-  "angel name necklace": 150,
-  "fairy name necklace": 150,
+  "bar necklace": 120,
+  "11:11 necklace": 100,
   "serenade necklace": 200,
-  "halo necklace": 120,
-  "opearl necklace": 182,
-  "forge bracelet": 150,
-  "blooming grace": 305,
-  "ananta": 350,
-  "jar of emotions": 30,
+  "halo necklace": 175,
+  "lucky clover necklace": 80,
+  "morse code jewellery": 47,
+  "morse code bracelet": 39,
+  "eternal love heart set": 340,
+  "butterfly anklet": 31,
+  "snake anklet": 35,
+  "round snake anklet": 40,
+  "daisy anklet": 70,
+  "personalised car keychain": 75,
+  "premium gift box": 22,
+  "premium gift box with gift wrap": 22,
+  "kashmiri bangles": 460,
+  "personalised cuff bracelet - couple": 144,
+  "personalised cuff bracelet - for female": 72,
+  "personalised cuff bracelet - for male": 72,
+  "butterfly bracelet": 31,
+  "daisy bracelet": 35,
+  "leafora bracelet": 104,
+  "bowfinity bracelet": 104,
+  "swan love bracelet": 104,
   "diy butterfly hamper": 177,
-  "clover anklet": 25,
-  "minimal bead anklet": 30,
-  "paper clip anklet": 18,
-  "pyrite anklet": 95,
-  "karungali mala": 85,
-  "money magnet bracelet": 85,
-  "everlasting guardian bell": 35,
-  "myra mangalsutra": 70,
-  "name necklace with personalised photo": 150,
-  "mangalsutra name necklace": 95,
-  "initial evil eye kada": 215,
+  "jar of emotions": 30,
+  "ananta": 350,
+  "5 in 1 gift box": 600,
 }
 
-// C2P partial payment amount
-export const C2P_AMOUNT = 150;
-
-// COD delivery rate assumption for expected profit
-export const COD_DELIVERY_RATE = 0.5;
-
-// Fixed costs per shipment (1 shipment = 1 order, regardless of items)
+// Logistics costs
 export const LOGISTICS_COSTS = {
-  box: 34.3,
-  warrantyCard: 1.3,
-  freeRing: 12.6,   // only for orders containing a necklace
-  packingBag: 3.304,
-  shipping: 65,
+  box: 34.3,            // per order (ALL orders, packed regardless)
+  warrantyCard: 1.5,    // per order, COD at 70%
+  freeRing: 17.51,      // per PREPAID order only
+  packingBag: 3.5,      // per order, COD at 70%
+  shippingPrepaid: 60,  // per prepaid order
+  shippingCOD: 100,     // per COD/C2P order, at 70%
 }
 
-// Fee rates applied on prepaid revenue (including C2P upfront)
+// COD dispatch rate (70% of COD/C2P orders actually ship)
+export const COD_DISPATCH_RATE = 0.7
+
+// Payment rates
+export const C2P_AMOUNT = 150         // upfront collection for PPCOD
+export const COD_DELIVERY_RATE = 0.5  // 50% of COD orders deliver successfully
+
+// Fee rates (on Cashfree collection only)
 export const FEE_RATES = {
   cashfree: 0.0134,
   engage: 0.00134,
   checkout: 0.0077,
 }
 
-/**
- * Find vendor price for a product. Matches longest key contained in title.
- */
+// Find vendor price from product title
 export function findVendorPrice(title, customPrices = {}) {
-  const name = title.toLowerCase()
-  const all = { ...DEFAULT_VENDOR_PRICES, ...customPrices }
-  let best = null, bestLen = 0
-  for (const [key, price] of Object.entries(all)) {
-    if (name.includes(key) && key.length > bestLen) {
-      best = { key, price }
-      bestLen = key.length
-    }
+  const lower = title.toLowerCase()
+  // Check custom prices first
+  for (const [key, price] of Object.entries(customPrices)) {
+    if (lower.includes(key)) return price
   }
-  return best ? best.price : 0
+  // Check defaults
+  for (const [key, price] of Object.entries(DEFAULT_VENDOR_PRICES)) {
+    if (lower.includes(key)) return price
+  }
+  return 0
 }
 
-/**
- * Detect buy multiplier: "Buy 2 @ 1899" -> 2, "Buy 3 @ 2199" -> 3
- */
-export function detectBuyMultiplier(title, variant) {
-  const text = `${title} ${variant || ''}`.toLowerCase()
-  const m = text.match(/buy\s*(\d+)/i)
-  return m ? parseInt(m[1]) : 1
+// Detect buy multiplier from title/variant
+export function detectBuyMultiplier(title, variantTitle) {
+  const combined = `${title} ${variantTitle || ''}`.toLowerCase()
+  const m3 = combined.match(/buy\s*3/i)
+  if (m3) return 3
+  const m2 = combined.match(/buy\s*2/i)
+  if (m2) return 2
+  return 1
 }
 
-/**
- * Detect pack multiplier for anklets: "Pack of 2 (Both Leg)" -> 2
- * This means vendor cost is base * 2 (2 physical pieces)
- */
-export function detectPackMultiplier(title, variant) {
-  const text = `${title} ${variant || ''}`.toLowerCase()
-  if (text.includes('pack of 2') || text.includes('both leg')) return 2
-  // "Set of 28 bangles" or "Set of 14 bangles"
-  const setMatch = text.match(/set of (\d+)/i)
-  if (setMatch) return 1 // vendor price already accounts for the set
+// Detect pack multiplier (e.g., "Pack of 2 Both Leg")
+export function detectPackMultiplier(title, variantTitle) {
+  const combined = `${title} ${variantTitle || ''}`.toLowerCase()
+  if (combined.includes('both leg') || combined.includes('pack of 2')) return 2
   return 1
 }

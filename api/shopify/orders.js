@@ -67,7 +67,7 @@ export default async function handler(req, res) {
 
     // Process each order into clean structure
     const orders = allOrders.map(order => {
-      const isCancelled = !!order.cancelled_at;
+      const isCancelled = !!order.cancelled_at || (order.tags || '').toLowerCase().includes('order-cancelled');
       const tags = (order.tags || '').toLowerCase();
       const tagList = tags.split(',').map(t => t.trim());
       const gateways = (order.payment_gateway_names || []).map(g => g.toLowerCase());
