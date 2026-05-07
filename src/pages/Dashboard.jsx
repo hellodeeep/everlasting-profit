@@ -140,14 +140,21 @@ export default function Dashboard() {
     setError(null)
     setProductFilter(null)
     try {
-      const shopify = await fetchShopifyOrders(dateRange.since, dateRange.until)
+      // Fetch Shopify and Meta in parallel for speed
+      const [shopifyResult, metaResult] = await Promise.allSettled([
+        fetchShopifyOrders(dateRange.since, dateRange.until),
+        fetchMetaSpend(dateRange.since, dateRange.until),
+      ])
+
+      if (shopifyResult.status === 'rejected') throw new Error(shopifyResult.reason?.message || 'Shopify fetch failed')
+      const shopify = shopifyResult.value
+
       let metaCampaigns = []
       let metaRawSpend = 0
-      try {
-        const meta = await fetchMetaSpend(dateRange.since, dateRange.until)
-        metaCampaigns = meta?.campaigns || []
-        metaRawSpend = meta?.summary?.totalSpend || 0
-      } catch (e) { console.warn('Meta unavailable:', e.message) }
+      if (metaResult.status === 'fulfilled' && metaResult.value) {
+        metaCampaigns = metaResult.value.campaigns || []
+        metaRawSpend = metaResult.value.summary?.totalSpend || 0
+      }
 
       setCachedData(dateRange.since, dateRange.until, {
         orders: shopify.orders,
