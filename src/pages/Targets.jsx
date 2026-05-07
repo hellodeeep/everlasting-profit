@@ -184,6 +184,119 @@ export default function Targets() {
 
       {p && (<>
 
+        {/* ============ ACTION SUMMARY ============ */}
+        {(() => {
+          const overallOnTrack = aOrd >= tOrdMTD * 0.9
+
+          // Build per-product action cards
+          const productActions = targets.products.map(t => {
+            const actual = p.products.find(pr => pr.name === t.name)
+            const aO = actual?.totalUnits || 0
+            const aR = actual?.revenue || 0
+            const aM = actual?.metaSpend || 0
+            const aC = aO > 0 ? aM / aO : 0
+            const aA = aO > 0 ? aR / aO : 0
+            const tO = Math.round(t.ordersDaily * daysElapsed)
+            const tM = Math.round(t.spendDaily * daysElapsed)
+            const pct = tO > 0 ? aO / tO : 0
+            const avgDaily = daysElapsed > 0 ? aO / daysElapsed : 0
+            const avgSpend = daysElapsed > 0 ? aM / daysElapsed : 0
+            const needOrders = daysRemaining > 0 ? Math.ceil((t.ordersMonthly - aO) / daysRemaining) : t.ordersDaily
+            const needSpend = daysRemaining > 0 ? Math.ceil((t.spendMonthly - aM) / daysRemaining) : t.spendDaily
+            const onTrack = pct >= 0.9
+            const cacOk = aC > 0 ? aC <= t.cac : true
+            const aovOk = aA > 0 ? aA >= t.aov * 0.85 : true
+
+            const steps = []
+            // Budget action
+            if (avgSpend < t.spendDaily * 0.85) {
+              steps.push(`Set daily budget to ₹${formatExact(needSpend)} (currently ₹${formatExact(avgSpend)}/day, target was ₹${formatExact(t.spendDaily)}/day)`)
+            } else if (avgSpend > t.spendDaily * 1.15) {
+              steps.push(`Reduce daily budget to ₹${formatExact(t.spendDaily)} -- you're overspending at ₹${formatExact(avgSpend)}/day`)
+            } else {
+              steps.push(`Maintain daily budget at ₹${formatExact(t.spendDaily)}/day`)
+            }
+            // Orders action
+            if (!onTrack) {
+              steps.push(`Get ${needOrders} orders tomorrow (you've been averaging ${Math.round(avgDaily)}/day, target is ${t.ordersDaily}/day)`)
+            } else {
+              steps.push(`Maintain ${t.ordersDaily} orders/day -- you're on pace`)
+            }
+            // CAC action
+            if (!cacOk) {
+              steps.push(`Bring CAC down from ₹${Math.round(aC)} to ₹${t.cac} -- pause ad sets with CAC above ₹${Math.round(t.cac * 1.2)}, duplicate winners`)
+            } else if (aC > 0) {
+              steps.push(`CAC ₹${Math.round(aC)} is within target ₹${t.cac} -- keep running current winners`)
+            }
+            // AOV action
+            if (!aovOk && aA > 0) {
+              steps.push(`Lift AOV from ₹${Math.round(aA)} to ₹${t.aov} -- push Buy 2/3 bundles, Gift Box upsells, higher-priced variants`)
+            }
+
+            return { ...t, aO, aR, aM, aC, aA, tO, pct, onTrack, needOrders, needSpend, avgDaily, avgSpend, steps }
+          })
+
+          return (
+            <div className="glass-card p-5 border-l-4 border-l-brand-500">
+              <h3 className="text-base font-bold text-accent mb-1">Tomorrow's Game Plan</h3>
+              <p className="text-xs text-brand-400 mb-4">
+                {overallOnTrack
+                  ? `You're on track overall (${aOrd}/${tOrdMTD} orders by Day ${daysElapsed}). Stay consistent.`
+                  : `You're behind by ${formatExact(tOrdMTD - aOrd)} orders. Here's what each product needs:`
+                }
+              </p>
+
+              <div className="space-y-4">
+                {productActions.map(pa => (
+                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-900/10 border border-green-800/20' : 'bg-red-900/8 border border-red-800/15'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.onTrack ? '✓' : '✗'}</span>
+                        <h4 className="text-sm font-semibold text-accent">{pa.name}</h4>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-brand-500">{pa.code}</span>
+                      </div>
+                      <span className={`text-xs font-mono font-bold ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>
+                        {pa.aO}/{pa.tO} orders ({(pa.pct * 100).toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 ml-6">
+                      {pa.steps.map((step, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="text-yellow-500 text-xs mt-0.5">{i + 1}.</span>
+                          <p className="text-xs text-brand-300 leading-relaxed">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Quick stats row */}
+                    <div className="flex gap-4 ml-6 mt-2 pt-2 border-t border-brand-800/15">
+                      <span className="text-[10px] text-brand-500">Avg: {Math.round(pa.avgDaily)} orders/day</span>
+                      <span className="text-[10px] text-brand-500">Spend: ₹{formatExact(pa.avgSpend)}/day</span>
+                      {pa.aC > 0 && <span className={`text-[10px] ${pa.aC <= pa.cac ? 'text-cash-green' : 'text-cash-red'}`}>CAC: ₹{Math.round(pa.aC)}</span>}
+                      {pa.aA > 0 && <span className={`text-[10px] ${pa.aA >= pa.aov * 0.9 ? 'text-cash-green' : 'text-yellow-400'}`}>AOV: ₹{Math.round(pa.aA)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Total daily targets strip */}
+              <div className="mt-4 pt-3 border-t border-brand-800/20 flex flex-wrap gap-4">
+                <div className="text-center">
+                  <p className="text-[9px] text-brand-500 uppercase">Total Daily Budget</p>
+                  <p className="text-sm font-bold font-mono text-accent">₹{formatExact(productActions.reduce((s, pa) => s + pa.needSpend, 0))}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] text-brand-500 uppercase">Total Orders Needed</p>
+                  <p className="text-sm font-bold font-mono text-accent">{productActions.reduce((s, pa) => s + pa.needOrders, 0)}/day</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] text-brand-500 uppercase">Revenue Needed</p>
+                  <p className="text-sm font-bold font-mono text-accent">₹{formatExact(neededRevDay)}/day</p>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* ============ SECTION 1: SPEND PACING ============ */}
         <div className="glass-card p-5">
           <h3 className="text-sm font-semibold text-accent mb-1">Meta Ad Spend Pacing</h3>
