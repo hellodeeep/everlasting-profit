@@ -239,7 +239,7 @@ export default function Dashboard() {
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
                 <PnLLine label="COGS (Vendor)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
-                <PnLLine label={`Boxes (${p.overview.totalOrders || allOrders?.length || 0} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
+                <PnLLine label={`Boxes (${p.overview.boxOrders || p.overview.totalOrders} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
                 <PnLLine label={`Warranty Card (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
                 <PnLLine label={`Free Ring (${p.overview.prepaidOrders} prepaid x ₹17.51)`} value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
                 <PnLLine label={`Packing Bags (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.packingBags)}`} indent />

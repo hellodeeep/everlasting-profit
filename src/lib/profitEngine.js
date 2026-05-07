@@ -134,9 +134,10 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   // ====== LOGISTICS (new logic: COD/C2P at 70% dispatch rate) ======
   const nPrepaid = prepaidOrders.length
   const nCodC2p = codC2pOrders.length
+  const nAllForBoxes = productFilter ? activeOrders.length : allOrders.length
 
-  // Boxes: ALL orders (packed before knowing dispatch outcome)
-  const totalBoxes = allOrders.length * LOGISTICS_COSTS.box
+  // Boxes: per order (all orders when unfiltered, filtered orders when filtered)
+  const totalBoxes = nAllForBoxes * LOGISTICS_COSTS.box
 
   // Warranty Card: prepaid full + COD/C2P at 70%
   const totalWarranty = nPrepaid * LOGISTICS_COSTS.warrantyCard + nCodC2p * COD_DISPATCH_RATE * LOGISTICS_COSTS.warrantyCard
@@ -186,7 +187,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   const allFamilies = [...new Set(allOrders.flatMap(o => o.lineItems.map(i => getProductFamily(i.title))))].sort()
 
   return {
-    overview: { totalOrders: allOrders.length,
+    overview: { totalOrders: allOrders.length, boxOrders: nAllForBoxes,
       activeOrders: activeOrders.length, cancelledOrders: cancelledCount,
       prepaidOrders: nPrepaid, c2pOrders: c2pOrders.length, codOrders: codOrders.length,
       codC2pOrders: nCodC2p,
