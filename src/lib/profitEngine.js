@@ -106,13 +106,25 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
           prepaidOrders: 0, codOrders: 0, c2pOrders: 0, totalOrders: 0,
           revenue: 0, vendorCost: 0,
           prepaidRevenue: 0, c2pRevenue: 0, codRevenue: 0,
-          orderIds: new Set(), variants: {},
+          // Full order tracking (includes upsell items like gift box)
+          orderIds: new Set(), prepaidOrderIds: new Set(), c2pOrderIds: new Set(), codOrderIds: new Set(),
+          fullOrderRevenue: 0, fullPrepaidRevenue: 0, fullC2pRevenue: 0, fullCodRevenue: 0,
+          variants: {},
         }
       }
       const pf = productMap[family]
       pf.totalUnits += totalUnits; pf.totalOrders += item.quantity
       pf.revenue += proportionalRevenue; pf.vendorCost += vendorCost
-      pf.orderIds.add(order.id)
+
+      // Track unique orders + full order totals (for AOV including upsells)
+      if (!pf.orderIds.has(order.id)) {
+        pf.orderIds.add(order.id)
+        pf.fullOrderRevenue += order.totalPrice
+        if (order.paymentType === 'prepaid') { pf.prepaidOrderIds.add(order.id); pf.fullPrepaidRevenue += order.totalPrice }
+        else if (order.paymentType === 'c2p') { pf.c2pOrderIds.add(order.id); pf.fullC2pRevenue += order.totalPrice }
+        else { pf.codOrderIds.add(order.id); pf.fullCodRevenue += order.totalPrice }
+      }
+
       if (order.paymentType === 'prepaid') { pf.prepaidUnits += totalUnits; pf.prepaidOrders += item.quantity; pf.prepaidRevenue += proportionalRevenue }
       else if (order.paymentType === 'c2p') { pf.c2pUnits += totalUnits; pf.c2pOrders += item.quantity; pf.c2pRevenue += proportionalRevenue }
       else { pf.codUnits += totalUnits; pf.codOrders += item.quantity; pf.codRevenue += proportionalRevenue }
@@ -189,11 +201,44 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     const pExpense = p.vendorCost + pLogistics + pFees + pAds
     const pProfit = pExpRev - pExpense
 
-    return { ...p, orderCount: p.orderIds.size, expectedRevenue: pExpRev,
+    // Unique order counts by payment type
+    const orderCount = p.orderIds.size
+    const prepaidOrderCount = p.prepaidOrderIds.size
+    const c2pOrderCount = p.c2pOrderIds.size
+    const codOrderCount = p.codOrderIds.size
+
+    // Payment split %
+    const prepaidPct = orderCount > 0 ? prepaidOrderCount / orderCount : 0
+    const c2pPct = orderCount > 0 ? c2pOrderCount / orderCount : 0
+    const codPct = orderCount > 0 ? codOrderCount / orderCount : 0
+
+    // AOV including upsells (full order total / unique orders)
+    const aovWithUpsells = orderCount > 0 ? p.fullOrderRevenue / orderCount : 0
+
+    // CAC with GST (Meta spend including GST / unique orders)
+    const cacWithGST = orderCount > 0 ? pAds / orderCount : 0
+
+    // Prepaid Revenue (full order totals) + C2P upfront
+    const prepaidRevenueTotal = p.fullPrepaidRevenue + (c2pOrderCount * C2P_AMOUNT)
+
+    // COD expected revenue (full order totals for COD at 30%)
+    const codRevenueExpected = p.fullCodRevenue * COD_DELIVERY_RATE
+      + Math.max(0, p.fullC2pRevenue - c2pOrderCount * C2P_AMOUNT) * COD_DELIVERY_RATE
+
+    // Prepaid Revenue to Meta Spend %
+    const prepaidToAdSpend = pAds > 0 ? prepaidRevenueTotal / pAds : 0
+
+    return { ...p, orderCount, prepaidOrderCount, c2pOrderCount, codOrderCount,
+      expectedRevenue: pExpRev,
       allocatedLogistics: pLogistics, allocatedFees: pFees,
       metaSpend: pAds, hasCampaignCode,
       totalExpense: pExpense, profit: pProfit,
       margin: pExpRev > 0 ? pProfit / pExpRev : 0,
+      // New metrics
+      prepaidPct, c2pPct, codPct,
+      aovWithUpsells, cacWithGST,
+      prepaidRevenueTotal, codRevenueExpected, prepaidToAdSpend,
+      fullOrderRevenue: p.fullOrderRevenue,
       variants: Object.values(p.variants).sort((a, b) => b.revenue - a.revenue) }
   }).sort((a, b) => b.revenue - a.revenue)
 
@@ -204,8 +249,14 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       activeOrders: activeOrders.length, cancelledOrders: cancelledCount,
       prepaidOrders: nPrepaid, c2pOrders: c2pOrders.length, codOrders: codOrders.length,
       codC2pOrders: nCodC2p,
-      prepaidRate: activeOrders.length > 0 ? nPrepaid / activeOrders.length : 0 },
-    revenue: { totalRevenue, expectedRevenue, prepaidRevenue, c2pRevenue, c2pUpfront, c2pExpected, codRevenue, codExpected, cashfreeCollection },
+      prepaidRate: activeOrders.length > 0 ? nPrepaid / activeOrders.length : 0,
+      c2pRate: activeOrders.length > 0 ? c2pOrders.length / activeOrders.length : 0,
+      codRate: activeOrders.length > 0 ? codOrders.length / activeOrders.length : 0 },
+    revenue: { totalRevenue, expectedRevenue, prepaidRevenue, c2pRevenue, c2pUpfront, c2pExpected, codRevenue, codExpected, cashfreeCollection,
+      // Prepaid Revenue including C2P upfront
+      prepaidRevenueTotal: prepaidRevenue + c2pUpfront,
+      // COD expected revenue
+      codRevenueExpected: codExpected + (c2pExpected - c2pUpfront) },
     expenses: { metaAds: metaSpendForView, metaAdsPreGST: metaSpendForView / 1.18,
       cogs: totalCOGS, logistics: totalLogistics, totalFees, total: totalExpense,
       boxes: totalBoxes, warrantyCard: totalWarranty,
@@ -215,8 +266,11 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     profit: { expected: expectedProfit, margin: expectedRevenue > 0 ? expectedProfit / expectedRevenue : 0,
       perOrder: activeOrders.length > 0 ? expectedProfit / activeOrders.length : 0 },
     metrics: { cpp: activeOrders.length > 0 ? metaSpendForView / activeOrders.length : 0,
+      cacWithGST: activeOrders.length > 0 ? metaSpendForView / activeOrders.length : 0,
+      cacPreGST: activeOrders.length > 0 ? (metaSpendForView / 1.18) / activeOrders.length : 0,
       aov: activeOrders.length > 0 ? totalRevenue / activeOrders.length : 0,
-      adSpendRatio: expectedRevenue > 0 ? metaSpendForView / expectedRevenue : 0 },
+      adSpendRatio: expectedRevenue > 0 ? metaSpendForView / expectedRevenue : 0,
+      prepaidToAdSpend: metaSpendForView > 0 ? (prepaidRevenue + c2pUpfront) / metaSpendForView : 0 },
     products, orderDetails, allFamilies,
     metaAllocation,
   }

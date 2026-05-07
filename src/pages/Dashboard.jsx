@@ -318,26 +318,32 @@ export default function Dashboard() {
 
       {p && (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Stat label="Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
-            <Stat label="Prepaid" value={p.overview.prepaidOrders} sub={formatPercent(p.overview.prepaidRate)} color="text-cash-green" />
-            <Stat label="C2P" value={p.overview.c2pOrders} sub={`₹150 x ${p.overview.c2pOrders}`} color="text-yellow-400" />
-            <Stat label="COD" value={p.overview.codOrders} sub="30% delivery" color="text-brand-300" />
-            <Stat label="AOV" value={`₹${formatExact(p.metrics.aov)}`} sub={`CPP: ₹${formatINR(p.metrics.cpp)}`} />
+          {/* Row 1: Orders & Payment Split */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <Stat label="Total Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
+            <Stat label="Prepaid %" value={formatPercent(p.overview.prepaidRate)} sub={`${p.overview.prepaidOrders} orders`} color="text-cash-green" />
+            <Stat label="C2P %" value={formatPercent(p.overview.c2pRate)} sub={`${p.overview.c2pOrders} orders (₹150 ea)`} color="text-yellow-400" />
+            <Stat label="COD %" value={formatPercent(p.overview.codRate)} sub={`${p.overview.codOrders} orders (30% del)`} color="text-brand-300" />
+            <Stat label="AOV (incl. upsells)" value={`₹${formatExact(p.metrics.aov)}`} sub="Full order value / orders" />
+            <Stat label="CAC (incl. GST)" value={`₹${formatExact(p.metrics.cacWithGST)}`}
+              sub={`Pre-GST: ₹${formatExact(p.metrics.cacPreGST)}`}
+              color={p.metrics.cacPreGST > 0 && p.metrics.cacPreGST <= 500 ? 'text-cash-green' : p.metrics.cacPreGST > 500 ? 'text-cash-red' : 'text-brand-300'} />
           </div>
 
-          {/* Key Metrics Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} sub={`Cashfree: ₹${formatExact(p.revenue.cashfreeCollection)}`} />
-            <Stat label="Meta Spend (incl. 18% GST)" value={`₹${formatExact(p.expenses.metaAds)}`}
-              sub={`Pre-GST: ₹${formatExact(p.expenses.metaAdsPreGST)} | ${formatPercent(p.metrics.adSpendRatio)} of rev`}
-              color={p.metrics.adSpendRatio > 0.55 ? 'text-cash-red' : 'text-brand-300'} />
+          {/* Row 2: Revenue & Profit */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Stat label="Prepaid Revenue (incl. C2P)" value={`₹${formatExact(p.revenue.prepaidRevenueTotal)}`}
+              sub={`Prepaid: ₹${formatExact(p.revenue.prepaidRevenue)} + C2P: ₹${formatExact(p.revenue.c2pUpfront)}`} color="text-cash-green" />
+            <Stat label="COD Expected Revenue" value={`₹${formatExact(p.revenue.codRevenueExpected)}`}
+              sub="COD + C2P remaining at 30%" color="text-brand-300" />
+            <Stat label="Meta Spend (incl. GST)" value={`₹${formatExact(p.expenses.metaAds)}`}
+              sub={`Prepaid Rev / Ad Spend: ${p.metrics.prepaidToAdSpend > 0 ? (p.metrics.prepaidToAdSpend * 100).toFixed(0) + '%' : '--'}`}
+              color={p.metrics.prepaidToAdSpend > 1.5 ? 'text-cash-green' : p.metrics.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-brand-300'} />
             <Stat label="Expected Profit" value={`₹${formatExact(p.profit.expected)}`}
               sub={`${formatPercent(p.profit.margin)} margin | ₹${Math.round(p.profit.perOrder)}/order`}
               color={p.profit.expected >= 0 ? 'text-cash-green' : 'text-cash-red'} />
-            <Stat label="COGS + Logistics + Fees" value={`₹${formatExact(p.expenses.cogs + p.expenses.logistics + p.expenses.totalFees)}`}
-              sub={`COGS: ₹${formatExact(p.expenses.cogs)}`} />
+            <Stat label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`}
+              sub={`COGS+Logistics: ₹${formatExact(p.expenses.cogs + p.expenses.logistics + p.expenses.totalFees)}`} />
           </div>
 
           {/* P&L */}
@@ -381,41 +387,55 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-accent">Product Breakdown -- click to drill in</h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
-                      <th className="py-2.5 px-4">Product</th>
-                      <th className="py-2.5 px-3 text-right">Prepaid</th>
-                      <th className="py-2.5 px-3 text-right">C2P</th>
-                      <th className="py-2.5 px-3 text-right">COD</th>
-                      <th className="py-2.5 px-3 text-right">Total</th>
-                      <th className="py-2.5 px-3 text-right">Revenue</th>
-                      <th className="py-2.5 px-3 text-right">Meta ₹</th>
-                      <th className="py-2.5 px-3 text-right">Profit</th>
-                      <th className="py-2.5 px-3 text-right">Margin</th>
+                      <th className="py-2.5 px-3">Product</th>
+                      <th className="py-2.5 px-2 text-right">Orders</th>
+                      <th className="py-2.5 px-2 text-right">Prepaid%</th>
+                      <th className="py-2.5 px-2 text-right">C2P%</th>
+                      <th className="py-2.5 px-2 text-right">COD%</th>
+                      <th className="py-2.5 px-2 text-right">AOV</th>
+                      <th className="py-2.5 px-2 text-right">Prepaid Rev</th>
+                      <th className="py-2.5 px-2 text-right">COD Rev</th>
+                      <th className="py-2.5 px-2 text-right">Meta ₹</th>
+                      <th className="py-2.5 px-2 text-right">CAC+GST</th>
+                      <th className="py-2.5 px-2 text-right">Prep/Ad%</th>
+                      <th className="py-2.5 px-2 text-right">Profit</th>
+                      <th className="py-2.5 px-2 text-right">Margin</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ap.products.map(prod => (
                       <tr key={prod.name} onClick={() => setProductFilter(prod.name)}
                         className="border-b border-brand-800/10 hover:bg-brand-700/20 cursor-pointer group">
-                        <td className="py-2.5 px-4 text-sm font-medium group-hover:text-white flex items-center gap-1.5">
-                          <ChevronRight size={12} className="text-brand-500 group-hover:text-accent" />
-                          <span className="text-accent">{prod.name}</span>
-                          {!prod.hasCampaignCode && rawData?.metaCampaigns?.length > 0 && <AlertTriangle size={10} className="text-yellow-500" />}
+                        <td className="py-2.5 px-3 text-sm font-medium group-hover:text-white">
+                          <div className="flex items-center gap-1.5">
+                            <ChevronRight size={12} className="text-brand-500 group-hover:text-accent" />
+                            <span className="text-accent">{prod.name}</span>
+                            {!prod.hasCampaignCode && rawData?.metaCampaigns?.length > 0 && <AlertTriangle size={10} className="text-yellow-500" />}
+                          </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">{prod.prepaidUnits}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-yellow-400">{prod.c2pUnits}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">{prod.codUnits}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">{prod.totalUnits}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(prod.revenue)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">
+                        <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-accent">{prod.orderCount}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{(prod.prepaidPct*100).toFixed(0)}%</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-yellow-400">{(prod.c2pPct*100).toFixed(0)}%</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{(prod.codPct*100).toFixed(0)}%</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-200">₹{formatExact(prod.aovWithUpsells)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">₹{formatExact(prod.prepaidRevenueTotal)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(prod.codRevenueExpected)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">
                           {prod.hasCampaignCode ? `₹${formatExact(prod.metaSpend)}` : <span className="text-yellow-500">--</span>}
                         </td>
-                        <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold ${prod.hasCampaignCode ? (prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red') : 'text-yellow-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.cacWithGST > 0 ? 'text-brand-200' : 'text-brand-500') : 'text-yellow-500'}`}>
+                          {prod.hasCampaignCode ? (prod.cacWithGST > 0 ? `₹${formatExact(prod.cacWithGST)}` : '--') : '--'}
+                        </td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.prepaidToAdSpend >= 1.5 ? 'text-cash-green' : prod.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-brand-500'}`}>
+                          {prod.hasCampaignCode && prod.prepaidToAdSpend > 0 ? `${(prod.prepaidToAdSpend*100).toFixed(0)}%` : '--'}
+                        </td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${prod.hasCampaignCode ? (prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red') : 'text-yellow-500'}`}>
                           {prod.hasCampaignCode ? `₹${formatExact(prod.profit)}` : '--'}
                         </td>
-                        <td className={`py-2.5 px-3 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-400' : 'text-cash-red') : 'text-yellow-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-400' : 'text-cash-red') : 'text-yellow-500'}`}>
                           {prod.hasCampaignCode ? formatPercent(prod.margin) : '--'}
                         </td>
                       </tr>
@@ -423,15 +443,21 @@ export default function Dashboard() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-brand-700/50 bg-brand-950/40">
-                      <td className="py-2.5 px-4 font-bold text-accent text-sm">TOTAL</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold">{ap.products.reduce((s,p)=>s+p.prepaidUnits,0)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-yellow-400">{ap.products.reduce((s,p)=>s+p.c2pUnits,0)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold">{ap.products.reduce((s,p)=>s+p.codUnits,0)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">{ap.products.reduce((s,p)=>s+p.totalUnits,0)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">₹{formatExact(ap.products.reduce((s,p)=>s+p.revenue,0))}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold">₹{formatExact(ap.expenses.metaAds)}</td>
-                      <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold ${ap.profit.expected>=0?'text-cash-green':'text-cash-red'}`}>₹{formatExact(ap.profit.expected)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-xs font-bold">{formatPercent(ap.profit.margin)}</td>
+                      <td className="py-2.5 px-3 font-bold text-accent text-sm">TOTAL</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-accent">{ap.overview.activeOrders}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{(ap.overview.prepaidRate*100).toFixed(0)}%</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-yellow-400">{(ap.overview.c2pRate*100).toFixed(0)}%</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{(ap.overview.codRate*100).toFixed(0)}%</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aov)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">₹{formatExact(ap.revenue.prepaidRevenueTotal)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.revenue.codRevenueExpected)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.expenses.metaAds)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.cacWithGST)}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ap.metrics.prepaidToAdSpend >= 1.5 ? 'text-cash-green' : 'text-cash-red'}`}>
+                        {ap.metrics.prepaidToAdSpend > 0 ? `${(ap.metrics.prepaidToAdSpend*100).toFixed(0)}%` : '--'}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ap.profit.expected>=0?'text-cash-green':'text-cash-red'}`}>₹{formatExact(ap.profit.expected)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{formatPercent(ap.profit.margin)}</td>
                     </tr>
                   </tfoot>
                 </table>
