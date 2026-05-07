@@ -32,7 +32,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   if (productFilter) {
     activeOrders.forEach(o => {
       const rev = o.lineItems.filter(i => getProductFamily(i.title) === productFilter)
-        .reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
+        .reduce((s, i) => s + (i.lineTotal || parseFloat(i.price) * i.quantity), 0)
       if (o.paymentType === 'prepaid') prepaidRevenue += rev
       else if (o.paymentType === 'c2p') c2pRevenue += rev
       else codRevenue += rev

@@ -104,17 +104,23 @@ export default async function handler(req, res) {
         fulfillmentStatus: order.fulfillment_status,
         cancelled: isCancelled,
         tags: order.tags || '',
-        lineItems: (order.line_items || []).map(item => ({
-          id: item.id,
-          title: item.title || '',
-          variantTitle: item.variant_title || '',
-          quantity: item.quantity || 1,
-          price: parseFloat(item.price || 0),
-          lineTotal: parseFloat(item.price || 0) * (item.quantity || 1),
-          sku: item.sku || '',
-          productId: item.product_id,
-          variantId: item.variant_id,
-        })),
+        lineItems: (order.line_items || []).map(item => {
+          const qty = item.quantity || 1;
+          const unitPrice = parseFloat(item.price || 0);
+          const totalDiscount = parseFloat(item.total_discount || 0);
+          const lineTotal = (unitPrice * qty) - totalDiscount;
+          return {
+            id: item.id,
+            title: item.title || '',
+            variantTitle: item.variant_title || '',
+            quantity: qty,
+            price: lineTotal / qty,  // effective price after discount
+            lineTotal: lineTotal,
+            sku: item.sku || '',
+            productId: item.product_id,
+            variantId: item.variant_id,
+          };
+        }),
         noteAttributes: order.note_attributes || [],
       };
     });
