@@ -206,7 +206,7 @@ export default function Dashboard() {
             <Stat label="Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
             <Stat label="Prepaid" value={p.overview.prepaidOrders} sub={formatPercent(p.overview.prepaidRate)} color="text-cash-green" />
             <Stat label="C2P" value={p.overview.c2pOrders} sub={`₹150 x ${p.overview.c2pOrders}`} color="text-yellow-400" />
-            <Stat label="COD" value={p.overview.codOrders} sub="50% delivery" color="text-brand-300" />
+            <Stat label="COD" value={p.overview.codOrders} sub="30% delivery" color="text-brand-300" />
             <Stat label="AOV" value={`₹${formatExact(p.metrics.aov)}`} sub={`CPP: ₹${formatINR(p.metrics.cpp)}`} />
           </div>
 
@@ -233,8 +233,8 @@ export default function Dashboard() {
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mb-1">Income</div>
                 <PnLLine label="Prepaid (Cashfree)" value={`₹${formatExact(p.revenue.prepaidRevenue)}`} indent />
                 <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.overview.c2pOrders * 150)}`} indent />
-                <PnLLine label="C2P COD portion (50%)" value={`₹${formatExact(Math.max(0, p.revenue.c2pExpected - p.overview.c2pOrders * 150))}`} indent />
-                <PnLLine label="COD revenue (50%)" value={`₹${formatExact(p.revenue.codExpected)}`} indent />
+                <PnLLine label="C2P COD portion (30%)" value={`₹${formatExact(Math.max(0, p.revenue.c2pExpected - p.overview.c2pOrders * 150))}`} indent />
+                <PnLLine label="COD revenue (30%)" value={`₹${formatExact(p.revenue.codExpected)}`} indent />
                 <PnLLine label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} bold />
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />

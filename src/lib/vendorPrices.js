@@ -49,7 +49,7 @@ export const COD_DISPATCH_RATE = 0.7
 
 // Payment rates
 export const C2P_AMOUNT = 150         // upfront collection for PPCOD
-export const COD_DELIVERY_RATE = 0.5  // 50% of COD orders deliver successfully
+export const COD_DELIVERY_RATE = 0.3  // 30% of COD orders actually deliver (70% ship, ~43% of shipped deliver)
 
 // Fee rates (on Cashfree collection only)
 export const FEE_RATES = {
