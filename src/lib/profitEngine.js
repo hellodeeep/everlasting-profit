@@ -30,9 +30,14 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   // ====== REVENUE ======
   let prepaidRevenue = 0, c2pRevenue = 0, codRevenue = 0
   if (productFilter) {
+    // Proportional revenue: distribute order total based on line item price share
     activeOrders.forEach(o => {
-      const rev = o.lineItems.filter(i => getProductFamily(i.title) === productFilter)
-        .reduce((s, i) => s + (i.lineTotal || parseFloat(i.price) * i.quantity), 0)
+      const orderLineTotal = o.lineItems.reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
+      const productLineTotal = o.lineItems
+        .filter(i => getProductFamily(i.title) === productFilter)
+        .reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
+      const share = orderLineTotal > 0 ? productLineTotal / orderLineTotal : 0
+      const rev = o.totalPrice * share
       if (o.paymentType === 'prepaid') prepaidRevenue += rev
       else if (o.paymentType === 'c2p') c2pRevenue += rev
       else codRevenue += rev
@@ -73,6 +78,9 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       ? order.lineItems.filter(i => getProductFamily(i.title) === productFilter)
       : order.lineItems
 
+    // Calculate proportional revenue share for each line item
+    const orderLineTotal = order.lineItems.reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
+
     items.forEach(item => {
       const vendorPrice = findVendorPrice(item.title, customVendorPrices)
       const buyMult = detectBuyMultiplier(item.title, item.variantTitle)
@@ -80,6 +88,11 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       const totalUnits = item.quantity * buyMult
       const vendorCost = vendorPrice * packMult * buyMult * item.quantity
       orderCOGS += vendorCost
+
+      // Proportional revenue: item's share of order total
+      const itemRawTotal = parseFloat(item.price) * item.quantity
+      const share = orderLineTotal > 0 ? itemRawTotal / orderLineTotal : 0
+      const proportionalRevenue = order.totalPrice * share
 
       const family = getProductFamily(item.title)
       const variantKey = item.variantTitle
@@ -98,25 +111,25 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       }
       const pf = productMap[family]
       pf.totalUnits += totalUnits; pf.totalOrders += item.quantity
-      pf.revenue += item.lineTotal; pf.vendorCost += vendorCost
+      pf.revenue += proportionalRevenue; pf.vendorCost += vendorCost
       pf.orderIds.add(order.id)
-      if (order.paymentType === 'prepaid') { pf.prepaidUnits += totalUnits; pf.prepaidOrders += item.quantity; pf.prepaidRevenue += item.lineTotal }
-      else if (order.paymentType === 'c2p') { pf.c2pUnits += totalUnits; pf.c2pOrders += item.quantity; pf.c2pRevenue += item.lineTotal }
-      else { pf.codUnits += totalUnits; pf.codOrders += item.quantity; pf.codRevenue += item.lineTotal }
+      if (order.paymentType === 'prepaid') { pf.prepaidUnits += totalUnits; pf.prepaidOrders += item.quantity; pf.prepaidRevenue += proportionalRevenue }
+      else if (order.paymentType === 'c2p') { pf.c2pUnits += totalUnits; pf.c2pOrders += item.quantity; pf.c2pRevenue += proportionalRevenue }
+      else { pf.codUnits += totalUnits; pf.codOrders += item.quantity; pf.codRevenue += proportionalRevenue }
 
       if (!pf.variants[variantKey]) {
         pf.variants[variantKey] = { name: variantKey, vendorPrice: vendorPrice * packMult * buyMult,
           prepaidQty: 0, codQty: 0, c2pQty: 0, totalQty: 0, revenue: 0, vendorCost: 0 }
       }
       const vr = pf.variants[variantKey]
-      vr.totalQty += item.quantity; vr.revenue += item.lineTotal; vr.vendorCost += vendorCost
+      vr.totalQty += item.quantity; vr.revenue += proportionalRevenue; vr.vendorCost += vendorCost
       if (order.paymentType === 'prepaid') vr.prepaidQty += item.quantity
       else if (order.paymentType === 'c2p') vr.c2pQty += item.quantity
       else vr.codQty += item.quantity
 
       processedItems.push({ title: item.title, variantTitle: item.variantTitle, family,
         quantity: item.quantity, buyMultiplier: buyMult, totalUnits,
-        sellingPrice: item.price, lineTotal: item.lineTotal, vendorPriceBase: vendorPrice, vendorCost })
+        sellingPrice: item.price, lineTotal: proportionalRevenue, vendorPriceBase: vendorPrice, vendorCost })
     })
 
     totalCOGS += orderCOGS
