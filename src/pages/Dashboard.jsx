@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Calendar, TrendingUp, TrendingDown, AlertCircle, DollarSign, ShoppingBag, BarChart, ChevronDown, ChevronRight, X, Filter, AlertTriangle } from 'lucide-react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import { RefreshCw, Calendar, AlertCircle, BarChart, ChevronDown, ChevronRight, ChevronLeft, X, Filter, AlertTriangle, Download, Clock, Check } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
@@ -14,8 +14,14 @@ function getDateRange(preset) {
     case '7d': { const d = new Date(today); d.setDate(d.getDate() - 6); return { since: fmt(d), until: fmt(today) } }
     case '30d': { const d = new Date(today); d.setDate(d.getDate() - 29); return { since: fmt(d), until: fmt(today) } }
     case 'mtd': { const d = new Date(today.getFullYear(), today.getMonth(), 1); return { since: fmt(d), until: fmt(today) } }
-    default: return { since: fmt(today), until: fmt(today) }
+    default: return null
   }
+}
+
+function shiftDate(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
 }
 
 function Stat({ label, value, sub, color = 'text-accent' }) {
@@ -37,32 +43,87 @@ function PnLLine({ label, value, indent, bold }) {
   )
 }
 
+function exportCSV(pnl, dateLabel) {
+  if (!pnl) return
+  const rows = [
+    ['Everlasting Profit Report', dateLabel],
+    [],
+    ['Metric', 'Value'],
+    ['Orders', pnl.overview.activeOrders],
+    ['Prepaid', pnl.overview.prepaidOrders],
+    ['C2P', pnl.overview.c2pOrders],
+    ['COD', pnl.overview.codOrders],
+    ['Cancelled', pnl.overview.cancelledOrders],
+    [],
+    ['Revenue', ''],
+    ['Prepaid Revenue', Math.round(pnl.revenue.prepaidRevenue)],
+    ['C2P Expected', Math.round(pnl.revenue.c2pExpected)],
+    ['COD Expected', Math.round(pnl.revenue.codExpected)],
+    ['Expected Revenue', Math.round(pnl.revenue.expectedRevenue)],
+    [],
+    ['Expenses', ''],
+    ['Meta Ads (incl GST)', Math.round(pnl.expenses.metaAds)],
+    ['COGS', Math.round(pnl.expenses.cogs)],
+    ['Boxes', Math.round(pnl.expenses.boxes)],
+    ['Warranty Card', Math.round(pnl.expenses.warrantyCard)],
+    ['Free Ring', Math.round(pnl.expenses.freeRing)],
+    ['Packing Bags', Math.round(pnl.expenses.packingBags)],
+    ['Shipping', Math.round(pnl.expenses.shipping)],
+    ['Cashfree Fee', Math.round(pnl.expenses.cashfree)],
+    ['Engage', Math.round(pnl.expenses.engage)],
+    ['Checkout', Math.round(pnl.expenses.checkout)],
+    ['Total Expenses', Math.round(pnl.expenses.total)],
+    [],
+    ['Expected Profit', Math.round(pnl.profit.expected)],
+    ['Margin %', (pnl.profit.margin * 100).toFixed(1) + '%'],
+    ['Per Order', Math.round(pnl.profit.perOrder)],
+    [],
+    ['Product', 'Units', 'Revenue', 'COGS', 'Meta', 'Profit', 'Margin'],
+    ...pnl.products.map(p => [
+      p.name, p.totalUnits, Math.round(p.revenue),
+      Math.round(p.vendorCost), Math.round(p.metaSpend),
+      Math.round(p.profit), (p.margin * 100).toFixed(1) + '%'
+    ])
+  ]
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `everlasting-profit-${dateLabel.replace(/\s/g, '-')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function Dashboard() {
-  const { rawData, setRawData } = useDataStore()
-  const [preset, setPreset] = useState(rawData?.preset || 'today')
+  const { getCachedData, setCachedData } = useDataStore()
+  const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [productFilter, setProductFilter] = useState(null)
   const [showPnL, setShowPnL] = useState(false)
+  const [showVariants, setShowVariants] = useState(true)
 
-  const dateRange = preset === 'custom' ? customRange : getDateRange(preset)
+  const dateRange = preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
   const dateLabel = dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`
-  const cachedDateLabel = rawData?.dateLabel || ''
-  const lastFetch = rawData?.lastFetch ? new Date(rawData.lastFetch) : null
+  const cacheKey = `${dateRange.since}_${dateRange.until}`
 
-  // Load product database for campaign codes + vendor prices
-  const dbProducts = useMemo(() => getProducts(), [rawData]) // re-check on fetch
+  // Get cached data for current date range
+  const rawData = dateRange.since ? getCachedData(dateRange.since, dateRange.until) : null
+  const lastFetch = rawData?.fetchedAt ? new Date(rawData.fetchedAt) : null
+  const isCached = !!rawData
+
+  // Product database
+  const dbProducts = useMemo(() => getProducts(), [rawData])
   const campaignMap = useMemo(() => buildCampaignMap(dbProducts), [dbProducts])
   const vendorPriceMap = useMemo(() => buildVendorPriceMap(dbProducts), [dbProducts])
 
-  // Compute Meta allocation from campaign data
   const metaAllocation = useMemo(() => {
     if (!rawData?.metaCampaigns) return {}
     return allocateMetaSpend(rawData.metaCampaigns, campaignMap)
   }, [rawData, campaignMap])
 
-  // P&L
   const pnl = useMemo(() => {
     if (!rawData?.orders) return null
     return calculateFullPnL(rawData.orders, metaAllocation, vendorPriceMap, productFilter)
@@ -74,6 +135,7 @@ export default function Dashboard() {
   }, [rawData, metaAllocation, vendorPriceMap])
 
   const fetchData = useCallback(async () => {
+    if (!dateRange.since || !dateRange.until) return
     setLoading(true)
     setError(null)
     setProductFilter(null)
@@ -87,26 +149,44 @@ export default function Dashboard() {
         metaRawSpend = meta?.summary?.totalSpend || 0
       } catch (e) { console.warn('Meta unavailable:', e.message) }
 
-      setRawData({
+      setCachedData(dateRange.since, dateRange.until, {
         orders: shopify.orders,
         metaCampaigns,
         metaRawSpend,
         apiMeta: shopify.meta,
-        dateLabel,
-        lastFetch: new Date().toISOString(),
-        preset,
       })
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [dateRange.since, dateRange.until, dateLabel, preset, setRawData])
+  }, [dateRange.since, dateRange.until, setCachedData])
 
-  const isStale = cachedDateLabel && cachedDateLabel !== dateLabel
+  // Auto-fetch if no cache exists for this range (only on preset change, not custom)
+  useEffect(() => {
+    if (preset !== 'custom' && dateRange.since && !getCachedData(dateRange.since, dateRange.until) && !loading) {
+      // Don't auto-fetch, just clear product filter
+      setProductFilter(null)
+    }
+  }, [preset])
+
+  // Navigate single day forward/backward
+  const canNavigateDay = dateRange.since === dateRange.until
+  const goDay = (dir) => {
+    const newDate = shiftDate(dateRange.since, dir)
+    const today = new Date().toISOString().split('T')[0]
+    if (newDate > today) return
+    setCustomRange({ since: newDate, until: newDate })
+    setPreset('custom')
+    setProductFilter(null)
+  }
+
   const p = pnl
   const ap = allPnl
   const missingCodes = ap?.products.filter(pr => !pr.hasCampaignCode) || []
+
+  // Sort product families by order count (descending)
+  const sortedFamilies = ap?.products.map(p => p.name).filter(Boolean) || []
 
   const presets = [
     { key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' },
@@ -121,28 +201,49 @@ export default function Dashboard() {
         <div>
           <h2 className="text-2xl font-bold text-accent">{productFilter || 'Profit Dashboard'}</h2>
           <p className="text-sm text-brand-400 mt-0.5">
-            {cachedDateLabel ? `Showing: ${cachedDateLabel}` : 'No data loaded'}
+            {dateLabel || 'Select a date range'}
             {rawData?.apiMeta && <span className="text-brand-600 ml-2">({rawData.apiMeta.rawOrderCount} orders)</span>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {lastFetch && <div className="flex items-center gap-2 text-xs text-brand-500"><div className="pulse-dot" />{lastFetch.toLocaleTimeString('en-IN')}</div>}
-          <button onClick={fetchData} disabled={loading} className="btn-primary flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-900/20 px-2.5 py-1 rounded-lg">
+            <Check size={10} /> Cached {lastFetch && <span className="text-brand-500">{lastFetch.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'})}</span>}
+          </div>}
+          {ap && <button onClick={() => exportCSV(ap, dateLabel)} className="btn-ghost flex items-center gap-1.5 text-xs">
+            <Download size={12} /> CSV
+          </button>}
+          <button onClick={fetchData} disabled={loading || !dateRange.since} className="btn-primary flex items-center gap-2">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Fetching...' : 'Fetch Data'}
+            {loading ? 'Fetching...' : isCached ? 'Refresh' : 'Fetch Data'}
           </button>
         </div>
       </div>
 
       {/* Date Range */}
       <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
-        <Calendar size={16} className="text-brand-400" />
-        {presets.map(pr => (
-          <button key={pr.key} onClick={() => setPreset(pr.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${preset === pr.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
-            {pr.label}
+        {canNavigateDay && (
+          <button onClick={() => goDay(-1)} className="p-1.5 rounded-lg text-brand-400 hover:text-accent hover:bg-brand-800/40">
+            <ChevronLeft size={16} />
           </button>
-        ))}
+        )}
+        <Calendar size={16} className="text-brand-400" />
+        {presets.map(pr => {
+          const range = pr.key !== 'custom' ? getDateRange(pr.key) : null
+          const hasCached = range ? !!getCachedData(range.since, range.until) : false
+          return (
+            <button key={pr.key} onClick={() => { setPreset(pr.key); setProductFilter(null) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${preset === pr.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
+              {pr.label}
+              {hasCached && preset !== pr.key && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cash-green" />}
+            </button>
+          )
+        })}
+        {canNavigateDay && (
+          <button onClick={() => goDay(1)} disabled={dateRange.since >= new Date().toISOString().split('T')[0]}
+            className="p-1.5 rounded-lg text-brand-400 hover:text-accent hover:bg-brand-800/40 disabled:opacity-30 disabled:cursor-not-allowed">
+            <ChevronRight size={16} />
+          </button>
+        )}
         {preset === 'custom' && (
           <div className="flex gap-2 ml-2">
             <input type="date" value={customRange.since} onChange={e => setCustomRange(c => ({ ...c, since: e.target.value }))} className="input-field !w-40 !py-1.5 !text-xs" />
@@ -151,12 +252,14 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Stale data warning */}
-      {isStale && <div className="glass-card p-3 bg-yellow-900/10 border-yellow-500/20 text-sm text-yellow-400 flex items-center gap-2">
-        <AlertTriangle size={14} /> Data is for {cachedDateLabel}. Click Fetch Data to load {dateLabel}.
-      </div>}
+      {/* Not cached notice */}
+      {!isCached && dateRange.since && !loading && (
+        <div className="glass-card p-3 bg-brand-900/30 text-sm text-brand-400 flex items-center gap-2">
+          <Clock size={14} /> No data for {dateLabel}. Click {isCached ? 'Refresh' : 'Fetch Data'} to load.
+        </div>
+      )}
 
-      {/* Product Filter */}
+      {/* Product Filter Pills - sorted by order count */}
       {ap && (
         <div className="glass-card p-3">
           <div className="flex items-center gap-2 flex-wrap">
@@ -165,12 +268,18 @@ export default function Dashboard() {
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${!productFilter ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
               All Products
             </button>
-            {ap.allFamilies.map(f => (
-              <button key={f} onClick={() => setProductFilter(productFilter === f ? null : f)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${productFilter === f ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
-                {f}
-              </button>
-            ))}
+            {sortedFamilies.map(f => {
+              const prod = ap.products.find(p => p.name === f)
+              return (
+                <button key={f} onClick={() => setProductFilter(productFilter === f ? null : f)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${productFilter === f ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
+                  {f}
+                  <span className={`text-[10px] font-mono ${productFilter === f ? 'text-brand-200' : 'text-brand-600'}`}>
+                    {prod?.totalUnits || 0}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -192,9 +301,9 @@ export default function Dashboard() {
           <div>
             <span className="font-medium">Missing campaign codes:</span>{' '}
             {missingCodes.map(p => p.name).join(', ')}.
-            {' '}Meta spend for these products can't be calculated. Add codes in Product Database.
+            {' '}Add codes in Product Database for per-product Meta spend.
             {metaAllocation._unallocated_withGST > 0 && (
-              <span className="block mt-1">Unallocated ad spend: ₹{formatExact(metaAllocation._unallocated_withGST)} (incl. GST)</span>
+              <span className="block mt-1">Unallocated: ₹{formatExact(metaAllocation._unallocated_withGST)} (incl. GST)</span>
             )}
           </div>
         </div>
@@ -202,6 +311,7 @@ export default function Dashboard() {
 
       {p && (
         <>
+          {/* Stat Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Stat label="Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
             <Stat label="Prepaid" value={p.overview.prepaidOrders} sub={formatPercent(p.overview.prepaidRate)} color="text-cash-green" />
@@ -210,6 +320,7 @@ export default function Dashboard() {
             <Stat label="AOV" value={`₹${formatExact(p.metrics.aov)}`} sub={`CPP: ₹${formatINR(p.metrics.cpp)}`} />
           </div>
 
+          {/* Key Metrics Row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Stat label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} sub={`Cashfree: ₹${formatExact(p.revenue.cashfreeCollection)}`} />
             <Stat label="Meta Spend (incl. 18% GST)" value={`₹${formatExact(p.expenses.metaAds)}`}
@@ -232,17 +343,17 @@ export default function Dashboard() {
               <div className="px-5 py-3 border-t border-brand-800/20">
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mb-1">Income</div>
                 <PnLLine label="Prepaid (Cashfree)" value={`₹${formatExact(p.revenue.prepaidRevenue)}`} indent />
-                <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.overview.c2pOrders * 150)}`} indent />
-                <PnLLine label="C2P COD portion (30%)" value={`₹${formatExact(Math.max(0, p.revenue.c2pExpected - p.overview.c2pOrders * 150))}`} indent />
+                <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.revenue.c2pUpfront)}`} indent />
+                <PnLLine label="C2P COD portion (30%)" value={`₹${formatExact(Math.max(0, p.revenue.c2pExpected - (p.revenue.c2pUpfront || p.overview.c2pOrders * 150)))}`} indent />
                 <PnLLine label="COD revenue (30%)" value={`₹${formatExact(p.revenue.codExpected)}`} indent />
                 <PnLLine label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} bold />
                 <div className="text-[10px] text-brand-500 uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
                 <PnLLine label="COGS (Vendor)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
                 <PnLLine label={`Boxes (${p.overview.boxOrders || p.overview.totalOrders} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
-                <PnLLine label={`Warranty Card (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
+                <PnLLine label="Warranty Card (prepaid + COD@70%)" value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
                 <PnLLine label={`Free Ring (${p.overview.prepaidOrders} prepaid x ₹17.51)`} value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
-                <PnLLine label={`Packing Bags (prepaid + COD@70%)`} value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
+                <PnLLine label="Packing Bags (prepaid + COD@70%)" value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
                 <PnLLine label={`Shipping (${p.overview.prepaidOrders}x₹60 + ${p.overview.codC2pOrders || 0}x₹100@70%)`} value={`-₹${formatExact(p.expenses.shipping)}`} indent />
                 <PnLLine label="Cashfree (1.34%)" value={`-₹${formatExact(p.expenses.cashfree)}`} indent />
                 <PnLLine label="Engage" value={`-₹${formatExact(p.expenses.engage)}`} indent />
@@ -294,10 +405,10 @@ export default function Dashboard() {
                         <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">
                           {prod.hasCampaignCode ? `₹${formatExact(prod.metaSpend)}` : <span className="text-yellow-500">--</span>}
                         </td>
-                        <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold ${prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>
-                          {prod.hasCampaignCode ? `₹${formatExact(prod.profit)}` : <span className="text-yellow-500">--</span>}
+                        <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold ${prod.hasCampaignCode ? (prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red') : 'text-yellow-500'}`}>
+                          {prod.hasCampaignCode ? `₹${formatExact(prod.profit)}` : '--'}
                         </td>
-                        <td className={`py-2.5 px-3 text-right font-mono text-xs ${prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-400' : 'text-cash-red'}`}>
+                        <td className={`py-2.5 px-3 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-400' : 'text-cash-red') : 'text-yellow-500'}`}>
                           {prod.hasCampaignCode ? formatPercent(prod.margin) : '--'}
                         </td>
                       </tr>
@@ -326,37 +437,40 @@ export default function Dashboard() {
             <>
               {!p.products[0].hasCampaignCode && rawData?.metaCampaigns?.length > 0 && (
                 <div className="glass-card p-3 bg-yellow-900/10 border-yellow-500/15 text-sm text-yellow-400 flex items-center gap-2">
-                  <AlertTriangle size={14} /> Campaign code missing for {productFilter}. Meta spend can't be allocated. Add it in Product Database.
+                  <AlertTriangle size={14} /> Campaign code missing for {productFilter}. Add it in Product Database.
                 </div>
               )}
               <div className="glass-card overflow-hidden">
-                <div className="px-5 py-3 border-b border-brand-800/20">
-                  <h3 className="text-sm font-semibold text-accent">Variants: {productFilter}</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
-                      <th className="py-2.5 px-4">Variant</th><th className="py-2.5 px-3 text-right">Vendor ₹</th>
-                      <th className="py-2.5 px-3 text-right">Prepaid</th><th className="py-2.5 px-3 text-right">C2P</th>
-                      <th className="py-2.5 px-3 text-right">COD</th><th className="py-2.5 px-3 text-right">Total</th>
-                      <th className="py-2.5 px-3 text-right">Revenue</th><th className="py-2.5 px-3 text-right">Vendor Cost</th>
-                    </tr></thead>
-                    <tbody>
-                      {p.products[0]?.variants.map(v => (
-                        <tr key={v.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
-                          <td className="py-2.5 px-4 text-sm text-brand-200">{v.name}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-400">₹{v.vendorPrice}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">{v.prepaidQty}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-yellow-400">{v.c2pQty}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">{v.codQty}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">{v.totalQty}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(v.revenue)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">₹{formatExact(v.vendorCost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <button onClick={() => setShowVariants(!showVariants)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-brand-900/20 border-b border-brand-800/20">
+                  <h3 className="text-sm font-semibold text-accent">Variants: {productFilter} ({p.products[0]?.variants.length || 0})</h3>
+                  <ChevronDown size={16} className={`text-brand-400 transition-transform ${showVariants ? 'rotate-180' : ''}`} />
+                </button>
+                {showVariants && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                        <th className="py-2.5 px-4">Variant</th><th className="py-2.5 px-3 text-right">Vendor ₹</th>
+                        <th className="py-2.5 px-3 text-right">Prepaid</th><th className="py-2.5 px-3 text-right">C2P</th>
+                        <th className="py-2.5 px-3 text-right">COD</th><th className="py-2.5 px-3 text-right">Total</th>
+                        <th className="py-2.5 px-3 text-right">Revenue</th><th className="py-2.5 px-3 text-right">Vendor Cost</th>
+                      </tr></thead>
+                      <tbody>
+                        {p.products[0]?.variants.map(v => (
+                          <tr key={v.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
+                            <td className="py-2.5 px-4 text-sm text-brand-200">{v.name}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-400">₹{v.vendorPrice}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">{v.prepaidQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-yellow-400">{v.c2pQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">{v.codQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">{v.totalQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(v.revenue)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">₹{formatExact(v.vendorCost)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
               <div className="glass-card overflow-hidden">
                 <div className="px-5 py-3 border-b border-brand-800/20">
@@ -377,7 +491,7 @@ export default function Dashboard() {
                           <td className="py-2 px-3 font-mono text-xs text-accent">#{o.id}</td>
                           <td className="py-2 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${o.paymentType==='prepaid'?'bg-green-900/30 text-cash-green':o.paymentType==='c2p'?'bg-yellow-900/30 text-yellow-400':'bg-brand-800/30 text-brand-300'}`}>{o.paymentType.toUpperCase()}</span></td>
                           <td className="py-2 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(o.totalPrice)}</td>
-                          <td className="py-2 px-3 text-xs text-brand-300">{o.lineItems.map((li,i) => <div key={i}>{li.title.split(' - ')[0]} {li.variantTitle?`(${li.variantTitle})`:''} x{li.quantity}</div>)}</td>
+                          <td className="py-2 px-3 text-xs text-brand-300">{o.lineItems.map((li,i) => <div key={i}>{li.title.split(' - ')[0]} x{li.quantity}</div>)}</td>
                           <td className="py-2 px-3 text-right font-mono text-xs text-brand-400">₹{formatExact(o.cogs)}</td>
                         </tr>
                       ))}
