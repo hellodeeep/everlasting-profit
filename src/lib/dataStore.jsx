@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
 const CACHE_KEY = 'everlasting_cache_v3'
-const MAX_CACHE_ENTRIES = 10
+const MAX_CACHE_ENTRIES = 45  // 31 days + multi-day ranges from Dashboard
 
 const DataContext = createContext(null)
 
