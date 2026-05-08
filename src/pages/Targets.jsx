@@ -299,6 +299,105 @@ export default function Targets() {
           )
         })()}
 
+        {/* ============ SIMPLE TRACKER TABLE ============ */}
+        <div className="glass-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-brand-800/20">
+            <h3 className="text-sm font-semibold text-accent">Product Tracker</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                  <th className="py-2.5 px-3" rowSpan={2}>Product</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-800/20" colSpan={5}>Orders / Day</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-800/20" colSpan={4}>Meta Spend / Day (pre-GST)</th>
+                </tr>
+                <tr className="border-b border-brand-800/30 text-[9px] text-brand-500 uppercase">
+                  <th className="py-1.5 px-2 text-right">Monthly</th>
+                  <th className="py-1.5 px-2 text-right">Target/Day</th>
+                  <th className="py-1.5 px-2 text-right">Your Avg</th>
+                  <th className="py-1.5 px-2 text-right">Status</th>
+                  <th className="py-1.5 px-2 text-right">Need/Day*</th>
+                  <th className="py-1.5 px-2 text-right">Target/Day</th>
+                  <th className="py-1.5 px-2 text-right">Your Avg</th>
+                  <th className="py-1.5 px-2 text-right">Status</th>
+                  <th className="py-1.5 px-2 text-right">Need/Day*</th>
+                </tr>
+              </thead>
+              <tbody>
+                {targets.products.map(t => {
+                  const actual = p.products.find(pr => pr.name === t.name)
+                  const aO = actual?.totalUnits || 0
+                  const aM = (actual?.metaSpend || 0) / 1.18
+                  const avgOrd = daysElapsed > 0 ? aO / daysElapsed : 0
+                  const avgSpd = daysElapsed > 0 ? aM / daysElapsed : 0
+                  const needOrd = daysRemaining > 0 ? Math.ceil((t.ordersMonthly - aO) / daysRemaining) : t.ordersDaily
+                  const needSpd = daysRemaining > 0 ? Math.ceil((t.spendMonthly - aM) / daysRemaining) : t.spendDaily
+                  const ordOnTrack = avgOrd >= t.ordersDaily * 0.9
+                  const spdOnTrack = avgSpd >= t.spendDaily * 0.85
+
+                  return (
+                    <tr key={t.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-accent">{t.name}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-brand-500">{t.code}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{formatExact(t.ordersMonthly)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">{t.ordersDaily}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ordOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>{Math.round(avgOrd)}</td>
+                      <td className="py-2.5 px-2 text-right">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ordOnTrack ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>
+                          {ordOnTrack ? 'On Track' : `Behind ${Math.round(t.ordersDaily - avgOrd)}/day`}
+                        </span>
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needOrd > t.ordersDaily * 1.3 ? 'text-cash-red' : needOrd > t.ordersDaily ? 'text-yellow-400' : 'text-cash-green'}`}>
+                        {needOrd <= 0 ? '-' : needOrd}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(t.spendDaily)}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${spdOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(avgSpd))}</td>
+                      <td className="py-2.5 px-2 text-right">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${spdOnTrack ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>
+                          {spdOnTrack ? 'On Track' : `Under ₹${formatExact(Math.round(t.spendDaily - avgSpd))}`}
+                        </span>
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needSpd > t.spendDaily * 1.3 ? 'text-cash-red' : needSpd > t.spendDaily ? 'text-yellow-400' : 'text-cash-green'}`}>
+                        ₹{formatExact(Math.round(needSpd))}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-brand-700/50 bg-brand-950/40">
+                  <td className="py-2.5 px-3 font-bold text-accent text-sm">TOTAL</td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{formatExact(targets.products.reduce((s,t) => s+t.ordersMonthly, 0))}</td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{targets.products.reduce((s,t) => s+t.ordersDaily, 0)}</td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{avgOrdDay}</td>
+                  <td className="py-2.5 px-2 text-right">
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${avgOrdDay >= tOrdDaily * 0.9 ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>
+                      {avgOrdDay >= tOrdDaily * 0.9 ? 'On Track' : `Behind ${Math.round(tOrdDaily - avgOrdDay)}/day`}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{neededOrdDay}</td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(tSpendDaily)}</td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(avgSpendDay)}</td>
+                  <td className="py-2.5 px-2 text-right">
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${avgSpendDay >= tSpendDaily * 0.85 ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>
+                      {avgSpendDay >= tSpendDaily * 0.85 ? 'On Track' : `Under ₹${formatExact(Math.round(tSpendDaily - avgSpendDay))}`}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(neededSpendDay)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="px-5 py-2 border-t border-brand-800/10">
+            <p className="text-[10px] text-brand-600">*Need/Day = what you must average over the remaining {daysRemaining} days to hit the monthly target. If higher than Target/Day, you're behind and need to accelerate.</p>
+          </div>
+        </div>
+
         {/* ============ SECTION 1: SPEND PACING ============ */}
         <div className="glass-card p-5">
           <h3 className="text-sm font-semibold text-accent mb-1">Meta Ad Spend Pacing</h3>
