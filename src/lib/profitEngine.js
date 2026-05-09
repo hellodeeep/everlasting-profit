@@ -49,6 +49,12 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   }
   const totalRevenue = prepaidRevenue + c2pRevenue + codRevenue
 
+  // Full order revenue for AOV (not proportional - actual order totals)
+  let fullOrderRevenue = totalRevenue  // same when unfiltered
+  if (productFilter) {
+    fullOrderRevenue = activeOrders.reduce((s, o) => s + o.totalPrice, 0)
+  }
+
   // Expected revenue: prepaid 100%, C2P = 150 upfront + remaining at 50%, COD = 50%
   const c2pUpfront = c2pOrders.length * C2P_AMOUNT
   const c2pExpected = productFilter
@@ -324,7 +330,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     metrics: { cpp: activeOrders.length > 0 ? metaSpendForView / activeOrders.length : 0,
       cacWithGST: activeOrders.length > 0 ? metaSpendForView / activeOrders.length : 0,
       cacPreGST: activeOrders.length > 0 ? (metaSpendForView / 1.18) / activeOrders.length : 0,
-      aov: activeOrders.length > 0 ? totalRevenue / activeOrders.length : 0,
+      aov: activeOrders.length > 0 ? fullOrderRevenue / activeOrders.length : 0,
       adSpendRatio: expectedRevenue > 0 ? metaSpendForView / expectedRevenue : 0,
       prepaidToAdSpend: metaSpendForView > 0 ? (prepaidRevenue + c2pUpfront) / metaSpendForView : 0 },
     products, orderDetails, allFamilies,
