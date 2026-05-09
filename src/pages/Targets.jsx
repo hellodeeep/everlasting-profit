@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X } from 'lucide-react'
-import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
+import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
@@ -18,7 +18,7 @@ function Tip({ children }) {
 }
 
 // ============ TARGET EDITOR ============
-function TargetEditor({ rawTargets, onSave, onCancel, dbProducts }) {
+function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData }) {
   const [form, setForm] = useState(JSON.parse(JSON.stringify(rawTargets)))
 
   const updateProduct = (idx, field, value) => {
@@ -33,25 +33,37 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts }) {
     setForm(prev => ({ ...prev, products: prev.products.filter((_, i) => i !== idx) }))
   }
 
-  const addProduct = () => {
-    // Show products from Product Database not already in targets
-    const existingNames = new Set(form.products.map(p => p.name))
-    const available = dbProducts.filter(p => !existingNames.has(p.name))
-    if (available.length === 0) {
-      // Add blank
-      setForm(prev => ({ ...prev, products: [...prev.products, { name: '', code: '', ordersMonthly: 0, cac: 0, aov: 0, profitMonthly: 0 }] }))
-    } else {
-      // Add first available with defaults
-      const p = available[0]
-      setForm(prev => ({ ...prev, products: [...prev.products, { name: p.name, code: p.campaignCode || '', ordersMonthly: 1000, cac: 400, aov: 900, profitMonthly: 100000 }] }))
-    }
-  }
-
   const addFromDB = (dbProd) => {
+    const ref = referenceData[dbProd.name]
     setForm(prev => ({
       ...prev,
-      products: [...prev.products, { name: dbProd.name, code: dbProd.campaignCode || '', ordersMonthly: 1000, cac: 400, aov: 900, profitMonthly: 100000 }]
+      products: [...prev.products, {
+        name: dbProd.name,
+        code: dbProd.campaignCode || '',
+        ordersMonthly: ref ? Math.round(ref.ordersPerDay * getDaysInMonth(prev.month)) : 1000,
+        cac: ref ? Math.round(ref.cac) : 400,
+        aov: ref ? Math.round(ref.aov) : 900,
+        vendorPrice: dbProd.vendorPrice || 0,
+        prepaidRate: ref ? Math.round(ref.prepaidRate * 100) : 75,
+        c2pRate: ref ? Math.round(ref.c2pRate * 100) : 10,
+      }]
     }))
+  }
+
+  const addBlank = () => {
+    setForm(prev => ({ ...prev, products: [...prev.products, { name: '', code: '', ordersMonthly: 1000, cac: 400, aov: 900, vendorPrice: 0, prepaidRate: 75, c2pRate: 10 }] }))
+  }
+
+  // Pre-fill from reference when clicking "Use actual"
+  const useActual = (idx) => {
+    const p = form.products[idx]
+    const ref = referenceData[p.name]
+    if (!ref) return
+    updateProduct(idx, 'cac', Math.round(ref.cac))
+    updateProduct(idx, 'aov', Math.round(ref.aov))
+    updateProduct(idx, 'prepaidRate', Math.round(ref.prepaidRate * 100))
+    updateProduct(idx, 'c2pRate', Math.round(ref.c2pRate * 100))
+    // Don't override orders - that's the target
   }
 
   const daysInMonth = getDaysInMonth(form.month)
@@ -68,101 +80,123 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts }) {
         </div>
       </div>
 
-      {/* Month selector */}
       <div className="mb-4">
         <label className="text-[10px] text-brand-400 uppercase tracking-wider mb-1 block">Target Month</label>
-        <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))}
-          className="input-field !w-48 !py-1.5 !text-sm" />
+        <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
       </div>
 
-      {/* Product targets table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b border-brand-800/30 text-[9px] text-brand-400 uppercase tracking-wider">
-              <th className="py-2 px-2">Product</th>
-              <th className="py-2 px-2">Code</th>
-              <th className="py-2 px-2 text-right">Monthly Orders</th>
-              <th className="py-2 px-2 text-right">Target CAC</th>
-              <th className="py-2 px-2 text-right">Target AOV</th>
-              <th className="py-2 px-2 text-right">Monthly Profit ₹</th>
-              <th className="py-2 px-2 text-right text-brand-500">Daily Orders</th>
-              <th className="py-2 px-2 text-right text-brand-500">Daily Spend</th>
-              <th className="py-2 px-2 text-right text-brand-500">Monthly Rev</th>
-              <th className="py-2 px-2 w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {form.products.map((p, idx) => {
-              const daily = Math.round((p.ordersMonthly || 0) / daysInMonth)
-              const spend = daily * (p.cac || 0)
-              const rev = (p.ordersMonthly || 0) * (p.aov || 0)
-              return (
-                <tr key={idx} className="border-b border-brand-800/10">
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-40" value={p.name}
-                      onChange={e => updateProduct(idx, 'name', e.target.value)} placeholder="Product name" />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-16 !text-center font-mono" value={p.code}
-                      onChange={e => updateProduct(idx, 'code', e.target.value.toUpperCase())} placeholder="PNN" />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-24 text-right font-mono" type="number" value={p.ordersMonthly || ''}
-                      onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-20 text-right font-mono" type="number" value={p.cac || ''}
-                      onChange={e => updateProduct(idx, 'cac', parseInt(e.target.value) || 0)} placeholder="500" />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-20 text-right font-mono" type="number" value={p.aov || ''}
-                      onChange={e => updateProduct(idx, 'aov', parseInt(e.target.value) || 0)} placeholder="1100" />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input className="input-field !py-1 !text-sm !w-28 text-right font-mono" type="number" value={p.profitMonthly || ''}
-                      onChange={e => updateProduct(idx, 'profitMonthly', parseInt(e.target.value) || 0)} />
-                  </td>
-                  <td className="py-2 px-2 text-right font-mono text-xs text-brand-500">{daily}/day</td>
-                  <td className="py-2 px-2 text-right font-mono text-xs text-brand-500">₹{formatExact(spend)}/day</td>
-                  <td className="py-2 px-2 text-right font-mono text-xs text-brand-500">₹{formatExact(rev)}</td>
-                  <td className="py-2 px-2">
-                    <button onClick={() => removeProduct(idx)} className="p-1 rounded text-brand-500 hover:text-cash-red hover:bg-red-900/20"><Trash2 size={12} /></button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-brand-700/30">
-              <td className="py-2 px-2 text-xs font-bold text-accent" colSpan={2}>TOTAL</td>
-              <td className="py-2 px-2 text-right font-mono text-xs font-bold">{formatExact(form.products.reduce((s,p) => s+(p.ordersMonthly||0), 0))}</td>
-              <td className="py-2 px-2"></td>
-              <td className="py-2 px-2"></td>
-              <td className="py-2 px-2 text-right font-mono text-xs font-bold">₹{formatExact(form.products.reduce((s,p) => s+(p.profitMonthly||0), 0))}</td>
-              <td className="py-2 px-2 text-right font-mono text-xs font-bold text-brand-500">{form.products.reduce((s,p) => s+Math.round((p.ordersMonthly||0)/daysInMonth), 0)}/day</td>
-              <td className="py-2 px-2 text-right font-mono text-xs font-bold text-brand-500">₹{formatExact(form.products.reduce((s,p) => s+Math.round((p.ordersMonthly||0)/daysInMonth)*(p.cac||0), 0))}/day</td>
-              <td className="py-2 px-2 text-right font-mono text-xs font-bold text-brand-500">₹{formatExact(form.products.reduce((s,p) => s+(p.ordersMonthly||0)*(p.aov||0), 0))}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+      {/* Products */}
+      <div className="space-y-4">
+        {form.products.map((p, idx) => {
+          const daily = Math.round((p.ordersMonthly || 0) / daysInMonth)
+          const spend = daily * (p.cac || 0)
+          const est = estimateProfit(p, daysInMonth)
+          const ref = referenceData[p.name]
+
+          return (
+            <div key={idx} className="p-4 rounded-xl bg-brand-900/30 border border-brand-800/20">
+              {/* Header row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <input className="input-field !py-1 !text-sm !w-44 font-semibold" value={p.name} onChange={e => updateProduct(idx, 'name', e.target.value)} placeholder="Product name" />
+                  <input className="input-field !py-1 !text-sm !w-16 !text-center font-mono" value={p.code} onChange={e => updateProduct(idx, 'code', e.target.value.toUpperCase())} placeholder="CODE" />
+                </div>
+                <div className="flex items-center gap-2">
+                  {ref && <button onClick={() => useActual(idx)} className="text-[10px] px-2 py-1 rounded bg-brand-800/40 text-yellow-400 hover:bg-brand-700/40">Use actual CAC/AOV</button>}
+                  <button onClick={() => removeProduct(idx)} className="p-1.5 rounded text-brand-500 hover:text-cash-red hover:bg-red-900/20"><Trash2 size={14} /></button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                {/* Monthly Orders */}
+                <div>
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Monthly Orders</label>
+                  <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.ordersMonthly || ''} onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
+                  <p className="text-[9px] text-brand-600 mt-0.5">{daily}/day</p>
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total)</p>}
+                </div>
+
+                {/* Target CAC */}
+                <div>
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Target CAC (pre-GST)</label>
+                  <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.cac || ''} onChange={e => updateProduct(idx, 'cac', parseInt(e.target.value) || 0)} />
+                  <p className="text-[9px] text-brand-600 mt-0.5">Spend: ₹{formatExact(spend)}/day</p>
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>Last 30d: ₹{Math.round(ref.cac)}</p>}
+                </div>
+
+                {/* Target AOV */}
+                <div>
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Target AOV</label>
+                  <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.aov || ''} onChange={e => updateProduct(idx, 'aov', parseInt(e.target.value) || 0)} />
+                  <p className="text-[9px] text-brand-600 mt-0.5">Rev: ₹{formatExact((p.ordersMonthly||0) * (p.aov||0))}/mo</p>
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-400'}`}>Last 30d: ₹{Math.round(ref.aov)}</p>}
+                </div>
+
+                {/* Vendor Price */}
+                <div>
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Vendor Price ₹</label>
+                  <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.vendorPrice || ''} onChange={e => updateProduct(idx, 'vendorPrice', parseInt(e.target.value) || 0)} />
+                  <p className="text-[9px] text-brand-600 mt-0.5">COGS per unit</p>
+                </div>
+
+                {/* Prepaid % */}
+                <div>
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Prepaid %</label>
+                  <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.prepaidRate || ''} onChange={e => updateProduct(idx, 'prepaidRate', parseInt(e.target.value) || 0)} />
+                  <p className="text-[9px] text-brand-600 mt-0.5">C2P: {p.c2pRate || 10}% | COD: {100 - (p.prepaidRate||75) - (p.c2pRate||10)}%</p>
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
+                </div>
+
+                {/* Auto-calculated Profit */}
+                <div className="bg-brand-800/20 rounded-lg p-2">
+                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Est. Monthly Profit</label>
+                  <p className={`text-lg font-bold font-mono ${est.profitMonthly > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(est.profitMonthly)}</p>
+                  <p className="text-[9px] text-brand-600 mt-0.5">
+                    {(est.profitPct * 100).toFixed(1)}% margin | ₹{Math.round(est.profitPerOrder)}/order
+                  </p>
+                  {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Add product */}
+      {/* Totals */}
+      {form.products.length > 0 && (() => {
+        const totals = form.products.reduce((acc, p) => {
+          const est = estimateProfit(p, daysInMonth)
+          return {
+            orders: acc.orders + (p.ordersMonthly || 0),
+            revenue: acc.revenue + (p.ordersMonthly || 0) * (p.aov || 0),
+            spend: acc.spend + (p.ordersMonthly || 0) * (p.cac || 0),
+            profit: acc.profit + est.profitMonthly,
+          }
+        }, { orders: 0, revenue: 0, spend: 0, profit: 0 })
+        return (
+          <div className="mt-4 p-3 rounded-lg bg-brand-800/20 flex flex-wrap gap-6">
+            <div><p className="text-[9px] text-brand-500 uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-accent">{formatExact(totals.orders)}/mo ({Math.round(totals.orders/daysInMonth)}/day)</p></div>
+            <div><p className="text-[9px] text-brand-500 uppercase">Total Revenue</p><p className="text-sm font-bold font-mono text-accent">₹{formatExact(totals.revenue)}</p></div>
+            <div><p className="text-[9px] text-brand-500 uppercase">Total Meta Spend</p><p className="text-sm font-bold font-mono text-brand-300">₹{formatExact(totals.spend)} (pre-GST)</p></div>
+            <div><p className="text-[9px] text-brand-500 uppercase">Total Est. Profit</p><p className={`text-sm font-bold font-mono ${totals.profit > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(totals.profit)}</p></div>
+          </div>
+        )
+      })()}
+
+      {/* Add products */}
       <div className="mt-3 flex items-center gap-2 flex-wrap">
-        {availableProducts.length > 0 && availableProducts.map(dp => (
+        {availableProducts.map(dp => (
           <button key={dp.name} onClick={() => addFromDB(dp)}
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-brand-800/40 text-brand-300 hover:text-accent hover:bg-brand-700/40 border border-brand-700/20">
             <Plus size={10} /> {dp.name} {dp.campaignCode && <span className="text-[9px] font-mono text-brand-500">{dp.campaignCode}</span>}
           </button>
         ))}
-        <button onClick={addProduct} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-brand-400 hover:text-accent border border-dashed border-brand-700/30 hover:border-brand-500/30">
-          <Plus size={10} /> Custom Product
+        <button onClick={addBlank} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-brand-400 hover:text-accent border border-dashed border-brand-700/30 hover:border-brand-500/30">
+          <Plus size={10} /> Custom
         </button>
       </div>
 
-      <Tip>You enter 4 values per product: Monthly Orders, Target CAC (pre-GST), Target AOV, and Monthly Profit Target. Everything else is auto-calculated. Daily Orders = Monthly / {daysInMonth} days. Daily Spend = Daily Orders × CAC. Monthly Revenue = Orders × AOV.</Tip>
+      <Tip>Profit is auto-calculated: Expected Revenue (based on prepaid/COD split) minus Meta Spend (CAC × 1.18 GST), COGS (vendor price), logistics (boxes, shipping, packing), and fees (Cashfree, Engage, Fastrr). Yellow "Last 30d" values show your actual performance as reference.</Tip>
     </div>
   )
 }
@@ -285,6 +319,52 @@ export default function Targets() {
   const neededSpendDay = daysRemaining > 0 ? Math.ceil((targets.products.reduce((s,t) => s+t.spendMonthly,0) - aSpend) / daysRemaining) : tSpendDaily
   const neededRevDay = daysRemaining > 0 ? Math.ceil((targets.totalRevenue - aRev) / daysRemaining) : Math.round(targets.totalRevenue / daysTotal)
 
+  // Build last 30 days reference data per product from cache
+  const referenceData = useMemo(() => {
+    const today = new Date()
+    const ref = {}
+    let allOrders = [], allCampaigns = []
+    let daysWithData = 0
+
+    for (let i = 1; i <= 30; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      const ds = d.toISOString().split('T')[0]
+      const data = getCachedData(ds, ds)
+      if (!data?.orders) continue
+      daysWithData++
+      allOrders.push(...data.orders)
+      allCampaigns.push(...(data.metaCampaigns || []))
+    }
+
+    if (allOrders.length === 0 || daysWithData === 0) return ref
+
+    const dbP = getProducts()
+    const campaignMap = buildCampaignMap(dbP)
+    const vendorPriceMap = buildVendorPriceMap(dbP)
+    const metaAlloc = allocateMetaSpend(allCampaigns, campaignMap)
+    const pnl = calculateFullPnL(allOrders, metaAlloc, vendorPriceMap)
+
+    pnl.products.forEach(prod => {
+      const metaPreGST = (prod.metaSpend || 0) / 1.18
+      ref[prod.name] = {
+        totalOrders: prod.orderCount,
+        ordersPerDay: prod.orderCount / daysWithData,
+        cac: prod.orderCount > 0 ? metaPreGST / prod.orderCount : 0,
+        aov: prod.aovWithUpsells || (prod.orderCount > 0 ? prod.fullOrderRevenue / prod.orderCount : 0),
+        prepaidRate: prod.prepaidPct || 0,
+        c2pRate: prod.c2pPct || 0,
+        codRate: prod.codPct || 0,
+        revenue: prod.revenue,
+        profit: prod.profit || 0,
+        profitPerDay: (prod.profit || 0) / daysWithData,
+        margin: prod.margin || 0,
+        daysWithData,
+      }
+    })
+    return ref
+  }, [cache])
+
   const [y, m] = month.split('-')
   const monthName = new Date(parseInt(y), parseInt(m) - 1).toLocaleString('en', { month: 'long', year: 'numeric' })
 
@@ -308,7 +388,7 @@ export default function Targets() {
       </div>
 
       {/* Target Editor */}
-      {editing && <TargetEditor rawTargets={rawTargets} onSave={saveTargets} onCancel={() => setEditing(false)} dbProducts={dbProducts} />}
+      {editing && <TargetEditor rawTargets={rawTargets} onSave={saveTargets} onCancel={() => setEditing(false)} dbProducts={dbProducts} referenceData={referenceData} />}
 
       {syncing && (
         <div className="glass-card p-3">
