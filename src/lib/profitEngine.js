@@ -165,42 +165,51 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   const heroFamilies = Object.keys(productMap).filter(f => !UPSELL_PATTERNS.some(p => f.toLowerCase().includes(p)))
 
   heroFamilies.forEach(family => {
-    const stats = { withUpsell: [], withoutUpsell: [] }
+    const ordersWithHero = []
 
     activeOrders.forEach(order => {
       const hasHero = order.lineItems.some(i => getProductFamily(i.title) === family)
       if (!hasHero) return
 
-      const hasUpsell = order.lineItems.some(i => isUpsellItem(i.title))
-      const upsellRevenue = order.lineItems
-        .filter(i => isUpsellItem(i.title))
-        .reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
+      const upsellItems = order.lineItems.filter(i => isUpsellItem(i.title))
+      const hasUpsell = upsellItems.length > 0
+      const upsellRevenue = upsellItems.reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
 
-      if (hasUpsell) {
-        stats.withUpsell.push({ total: order.totalPrice, upsellRevenue, paymentType: order.paymentType })
-      } else {
-        stats.withoutUpsell.push({ total: order.totalPrice, paymentType: order.paymentType })
-      }
+      ordersWithHero.push({
+        id: order.id, name: order.name, total: order.totalPrice,
+        paymentType: order.paymentType, hasUpsell, upsellRevenue,
+        items: order.lineItems.map(i => ({ title: i.title, qty: i.quantity, price: parseFloat(i.price) })),
+      })
     })
 
-    const totalOrders = stats.withUpsell.length + stats.withoutUpsell.length
-    if (totalOrders === 0) return
+    if (ordersWithHero.length === 0) return
+
+    const totalOrderValue = ordersWithHero.reduce((s, o) => s + o.total, 0)
+    const totalUpsellRevenue = ordersWithHero.reduce((s, o) => s + o.upsellRevenue, 0)
+    const ordersWithBox = ordersWithHero.filter(o => o.hasUpsell)
+    const ordersWithoutBox = ordersWithHero.filter(o => !o.hasUpsell)
+    const n = ordersWithHero.length
+
+    // AOV current = total order value / orders (includes gift box revenue)
+    // AOV without gift box = (total order value - all gift box revenue) / orders
+    const aovCurrent = totalOrderValue / n
+    const aovWithoutBox = (totalOrderValue - totalUpsellRevenue) / n
+    const aovLiftAmount = totalUpsellRevenue / n  // gift box adds this much per order on average
 
     upsellAnalysis[family] = {
-      totalOrders,
-      withUpsellCount: stats.withUpsell.length,
-      withoutUpsellCount: stats.withoutUpsell.length,
-      attachRate: stats.withUpsell.length / totalOrders,
-      aovWithUpsell: stats.withUpsell.length > 0 ? stats.withUpsell.reduce((s, o) => s + o.total, 0) / stats.withUpsell.length : 0,
-      aovWithoutUpsell: stats.withoutUpsell.length > 0 ? stats.withoutUpsell.reduce((s, o) => s + o.total, 0) / stats.withoutUpsell.length : 0,
-      aovLift: 0,
-      totalUpsellRevenue: stats.withUpsell.reduce((s, o) => s + o.upsellRevenue, 0),
-      // Prepaid breakdown
-      prepaidWithUpsell: stats.withUpsell.filter(o => o.paymentType === 'prepaid').length,
-      prepaidWithout: stats.withoutUpsell.filter(o => o.paymentType === 'prepaid').length,
+      totalOrders: n,
+      withUpsellCount: ordersWithBox.length,
+      withoutUpsellCount: ordersWithoutBox.length,
+      attachRate: ordersWithBox.length / n,
+      aovCurrent,
+      aovWithoutBox,
+      aovLiftAmount,
+      aovLiftPct: aovWithoutBox > 0 ? aovLiftAmount / aovWithoutBox : 0,
+      totalUpsellRevenue,
+      avgUpsellPerBoxOrder: ordersWithBox.length > 0 ? totalUpsellRevenue / ordersWithBox.length : 0,
+      // Order details for drill-down
+      orders: ordersWithHero,
     }
-    const u = upsellAnalysis[family]
-    u.aovLift = u.aovWithoutUpsell > 0 ? (u.aovWithUpsell - u.aovWithoutUpsell) / u.aovWithoutUpsell : 0
   })
 
   // ====== LOGISTICS (new logic: COD/C2P at 70% dispatch rate) ======
