@@ -1,28 +1,4 @@
-const STORAGE_KEY = 'everlasting_targets'
-
-// Default May 2026 targets from sheet
-const DEFAULT_TARGETS = {
-  month: '2026-05',
-  totalRevenue: 8554630,
-  totalProfit: 1910967,
-  products: [
-    { name: 'Name Necklace', code: 'PNN', cac: 500, ordersMonthly: 3000, ordersDaily: 96, spendMonthly: 1500000, spendDaily: 48387, aov: 1100, revenueMonthly: 3165000, revenueDaily: 102097, profitMonthly: 674000, profitDaily: 21742, profitPct: 0.213 },
-    { name: 'Snake Anklet', code: 'SA', cac: 350, ordersMonthly: 3000, ordersDaily: 96, spendMonthly: 1050000, spendDaily: 33871, aov: 949, revenueMonthly: 2049840, revenueDaily: 66124, profitMonthly: 489545, profitDaily: 15792, profitPct: 0.239 },
-    { name: 'Butterfly Anklet', code: 'BFA', cac: 350, ordersMonthly: 3000, ordersDaily: 96, spendMonthly: 1050000, spendDaily: 33871, aov: 949, revenueMonthly: 2049840, revenueDaily: 66124, profitMonthly: 489545, profitDaily: 15792, profitPct: 0.239 },
-    { name: 'Personalised Car Keychain', code: 'PCK', cac: 450, ordersMonthly: 1500, ordersDaily: 48, spendMonthly: 675000, spendDaily: 21774, aov: 875, revenueMonthly: 1289950, revenueDaily: 41611, profitMonthly: 257877, profitDaily: 8319, profitPct: 0.200 },
-  ]
-}
-
-export function getTargets() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : DEFAULT_TARGETS
-  } catch { return DEFAULT_TARGETS }
-}
-
-export function saveTargets(targets) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(targets))
-}
+// Target management - stored in IndexedDB via dataStore
 
 export function getDaysInMonth(month) {
   const [y, m] = month.split('-').map(Number)
@@ -39,4 +15,57 @@ export function getDaysElapsed(month) {
   return 0
 }
 
-export { DEFAULT_TARGETS }
+export function getCurrentMonth() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Compute derived fields from user inputs
+export function computeProduct(p, daysInMonth) {
+  const ordersDaily = Math.round(p.ordersMonthly / daysInMonth)
+  const spendMonthly = p.ordersMonthly * p.cac
+  const spendDaily = Math.round(spendMonthly / daysInMonth)
+  const revenueMonthly = p.ordersMonthly * p.aov
+  const revenueDaily = Math.round(revenueMonthly / daysInMonth)
+  const profitDaily = Math.round(p.profitMonthly / daysInMonth)
+  const profitPct = revenueMonthly > 0 ? p.profitMonthly / revenueMonthly : 0
+
+  return {
+    ...p,
+    ordersDaily,
+    spendDaily,
+    spendMonthly,
+    revenueMonthly,
+    revenueDaily,
+    profitDaily,
+    profitPct,
+  }
+}
+
+// Build a full target object with computed fields
+export function buildTargets(raw) {
+  const daysInMonth = getDaysInMonth(raw.month)
+  const products = (raw.products || []).map(p => computeProduct(p, daysInMonth))
+  const totalRevenue = products.reduce((s, p) => s + p.revenueMonthly, 0)
+  const totalProfit = products.reduce((s, p) => s + p.profitMonthly, 0)
+
+  return {
+    month: raw.month,
+    totalRevenue,
+    totalProfit,
+    products,
+  }
+}
+
+// Default May 2026 targets (used as initial data if nothing saved)
+export const DEFAULT_RAW_TARGETS = {
+  month: '2026-05',
+  products: [
+    { name: 'Name Necklace', code: 'PNN', ordersMonthly: 3000, cac: 500, aov: 1100, profitMonthly: 674000 },
+    { name: 'Snake Anklet', code: 'SA', ordersMonthly: 3000, cac: 350, aov: 949, profitMonthly: 489545 },
+    { name: 'Butterfly Anklet', code: 'BFA', ordersMonthly: 3000, cac: 350, aov: 949, profitMonthly: 489545 },
+    { name: 'Personalised Car Keychain', code: 'PCK', ordersMonthly: 1500, cac: 450, aov: 875, profitMonthly: 257877 },
+  ],
+}
+
+export const TARGETS_CACHE_KEY = 'targets_config'
