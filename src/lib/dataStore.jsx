@@ -1,25 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
 const DB_NAME = 'everlasting_profit'
 const STORE_NAME = 'cache'
 const DB_VERSION = 1
 
-// ---- IndexedDB helpers (no size limit like localStorage) ----
+// ---- IndexedDB helpers ----
+let dbInstance = null
+
 function openDB() {
+  if (dbInstance) return Promise.resolve(dbInstance)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => { req.result.createObjectStore(STORE_NAME) }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-async function idbGet(key) {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const req = tx.objectStore(STORE_NAME).get(key)
-    req.onsuccess = () => resolve(req.result || null)
+    req.onsuccess = () => { dbInstance = req.result; resolve(dbInstance) }
     req.onerror = () => reject(req.error)
   })
 }
@@ -56,7 +49,6 @@ const DataContext = createContext(null)
 export function DataProvider({ children }) {
   const [cache, setCache] = useState({})
   const [ready, setReady] = useState(false)
-  const pendingSaves = useRef(new Set())
 
   // Load all cached data from IndexedDB on mount
   useEffect(() => {
@@ -74,21 +66,21 @@ export function DataProvider({ children }) {
   const setCachedData = useCallback((since, until, data) => {
     const key = `${since}_${until}`
     const entry = { ...data, fetchedAt: Date.now() }
-
-    // Update React state immediately
     setCache(prev => ({ ...prev, [key]: entry }))
+    idbSet(key, entry).catch(e => console.warn('IDB save failed:', e))
+  }, [])
 
-    // Persist to IndexedDB in background (non-blocking)
-    if (!pendingSaves.current.has(key)) {
-      pendingSaves.current.add(key)
-      idbSet(key, entry).catch(e => console.warn('Cache save failed:', e)).finally(() => {
-        pendingSaves.current.delete(key)
-      })
-    }
+  // Generic cache for any key (used by Meta Ads etc)
+  const getCacheByKey = useCallback((key) => cache[key] || null, [cache])
+
+  const setCacheByKey = useCallback((key, data) => {
+    const entry = { ...data, fetchedAt: Date.now() }
+    setCache(prev => ({ ...prev, [key]: entry }))
+    idbSet(key, entry).catch(e => console.warn('IDB save failed:', e))
   }, [])
 
   return (
-    <DataContext.Provider value={{ cache, getCachedData, setCachedData, ready }}>
+    <DataContext.Provider value={{ cache, getCachedData, setCachedData, getCacheByKey, setCacheByKey, ready }}>
       {children}
     </DataContext.Provider>
   )

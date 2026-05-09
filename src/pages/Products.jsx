@@ -57,7 +57,7 @@ export default function Products() {
   const [editing, setEditing] = useState(null)
   const [search, setSearch] = useState('')
   const [showDefaults, setShowDefaults] = useState(false)
-  const { cache } = useDataStore()
+  const { cache, ready } = useDataStore()
 
   useEffect(() => { setProducts(getProducts()) }, [])
 

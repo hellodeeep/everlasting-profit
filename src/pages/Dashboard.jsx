@@ -96,7 +96,7 @@ function exportCSV(pnl, dateLabel) {
 }
 
 export default function Dashboard() {
-  const { getCachedData, setCachedData } = useDataStore()
+  const { getCachedData, setCachedData, ready } = useDataStore()
   const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [loading, setLoading] = useState(false)
@@ -676,7 +676,9 @@ export default function Dashboard() {
         </>
       )}
 
-      {!pnl && !loading && <div className="glass-card p-12 text-center">
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+
+      {ready && !pnl && !loading && <div className="glass-card p-12 text-center">
         <BarChart size={48} className="text-brand-600 mx-auto mb-4" />
         <h3 className="text-lg font-semibold text-accent mb-2">No data yet</h3>
         <p className="text-sm text-brand-400">Select a date range and hit Fetch Data.</p>

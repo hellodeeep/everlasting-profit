@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { RefreshCw, Calendar, ChevronDown, ChevronUp, TrendingUp, TrendingDown, AlertTriangle, Zap, ArrowUpDown } from 'lucide-react'
 import { formatExact, formatPercent } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap } from '../lib/productDB'
+import { useDataStore } from '../lib/dataStore'
 
 function getDateRange(preset) {
   const today = new Date()
@@ -40,6 +41,7 @@ function SortHeader({ label, sortKey, currentSort, onSort, align = 'right' }) {
 }
 
 export default function MetaAds() {
+  const { getCacheByKey, setCacheByKey, ready } = useDataStore()
   const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [loading, setLoading] = useState(false)
@@ -47,34 +49,63 @@ export default function MetaAds() {
   const [campaignData, setCampaignData] = useState(null)
   const [adsetData, setAdsetData] = useState(null)
   const [adData, setAdData] = useState(null)
-  const [view, setView] = useState('ads') // ads, campaigns, adsets, products
+  const [view, setView] = useState('ads')
   const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
   const [showZeroSpend, setShowZeroSpend] = useState(false)
   const [dateLabel, setDateLabel] = useState('')
   const [productFilter, setProductFilter] = useState(null)
+  const [isCached, setIsCached] = useState(false)
 
   const dateRange = preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
+  const cacheKey = dateRange.since ? `meta_${dateRange.since}_${dateRange.until}` : null
   const dbProducts = useMemo(() => getProducts(), [])
   const campaignMap = useMemo(() => buildCampaignMap(dbProducts), [dbProducts])
+
+  // Load from cache when date changes or on mount
+  useEffect(() => {
+    if (!cacheKey || !ready) return
+    const cached = getCacheByKey(cacheKey)
+    if (cached) {
+      setCampaignData(cached.campaigns || null)
+      setAdsetData(cached.adsets || null)
+      setAdData(cached.ads || null)
+      setDateLabel(dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`)
+      setIsCached(true)
+    } else {
+      setCampaignData(null); setAdsetData(null); setAdData(null)
+      setIsCached(false)
+    }
+  }, [cacheKey, ready])
 
   const fetchData = useCallback(async () => {
     if (!dateRange.since || !dateRange.until) return
     setLoading(true)
     setError(null)
+    setIsCached(false)
     try {
       const [campRes, adsetRes, adRes] = await Promise.allSettled([
         fetch(`/api/meta/campaigns?since=${dateRange.since}&until=${dateRange.until}&level=campaign`).then(r => r.json()),
         fetch(`/api/meta/campaigns?since=${dateRange.since}&until=${dateRange.until}&level=adset`).then(r => r.json()),
         fetch(`/api/meta/campaigns?since=${dateRange.since}&until=${dateRange.until}&level=ad`).then(r => r.json()),
       ])
-      if (campRes.status === 'fulfilled' && !campRes.value.error) setCampaignData(campRes.value.data)
-      else setError(campRes.value?.error || 'Campaign fetch failed')
-      if (adsetRes.status === 'fulfilled' && !adsetRes.value.error) setAdsetData(adsetRes.value.data)
-      if (adRes.status === 'fulfilled' && !adRes.value.error) setAdData(adRes.value.data)
+
+      const camps = campRes.status === 'fulfilled' && !campRes.value.error ? campRes.value.data : null
+      const adsets = adsetRes.status === 'fulfilled' && !adsetRes.value.error ? adsetRes.value.data : null
+      const ads = adRes.status === 'fulfilled' && !adRes.value.error ? adRes.value.data : null
+
+      if (camps) setCampaignData(camps); else setError(campRes.value?.error || 'Campaign fetch failed')
+      if (adsets) setAdsetData(adsets)
+      if (ads) setAdData(ads)
+
+      // Cache everything
+      if (cacheKey && (camps || adsets || ads)) {
+        setCacheByKey(cacheKey, { campaigns: camps, adsets, ads })
+      }
+
       setDateLabel(dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`)
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
-  }, [dateRange.since, dateRange.until])
+  }, [dateRange.since, dateRange.until, cacheKey, setCacheByKey])
 
   const handleSort = (key) => {
     setSort(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }))
@@ -196,10 +227,15 @@ export default function MetaAds() {
           <h2 className="text-2xl font-bold text-accent">Meta Ads</h2>
           <p className="text-sm text-brand-400 mt-0.5">{dateLabel || 'Select date range and fetch'}</p>
         </div>
-        <button onClick={fetchData} disabled={loading || !dateRange.since} className="btn-primary flex items-center gap-2">
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Fetching...' : 'Fetch Meta Data'}
-        </button>
+        <div className="flex items-center gap-2">
+          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-900/20 px-2.5 py-1 rounded-lg">
+            <span>✓</span> Cached
+          </div>}
+          <button onClick={fetchData} disabled={loading || !dateRange.since} className="btn-primary flex items-center gap-2">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            {loading ? 'Fetching...' : isCached ? 'Refresh' : 'Fetch Meta Data'}
+          </button>
+        </div>
       </div>
 
       {/* Date */}
@@ -480,7 +516,9 @@ export default function MetaAds() {
         </div>
       </>)}
 
-      {!summary && !loading && (
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+
+      {ready && !summary && !loading && (
         <div className="glass-card p-12 text-center">
           <Zap size={48} className="text-brand-600 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">Meta Ad Analytics</h3>

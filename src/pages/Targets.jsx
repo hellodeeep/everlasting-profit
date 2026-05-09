@@ -32,7 +32,7 @@ function Delta({ actual, target, inverse, prefix = '₹', suffix = '' }) {
 
 export default function Targets() {
   const targets = getTargets()
-  const { cache, getCachedData, setCachedData } = useDataStore()
+  const { cache, getCachedData, setCachedData, ready } = useDataStore()
   const [syncing, setSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, day: '' })
   const [showDaily, setShowDaily] = useState(false)
@@ -180,7 +180,9 @@ export default function Targets() {
         <Bar pct={timePct} color="bg-brand-500" h="h-3" />
       </div>
 
-      {!hasFetched && !syncing && (
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+
+      {ready && !hasFetched && !syncing && (
         <div className="glass-card p-10 text-center">
           <Target size={48} className="text-brand-600 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">Sync your data first</h3>
