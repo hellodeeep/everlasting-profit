@@ -156,6 +156,53 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     }
   })
 
+  // ====== UPSELL ANALYSIS ======
+  const UPSELL_PATTERNS = ['premium gift box', 'gift wrap', '5 in 1 gift box']
+  const isUpsellItem = (title) => UPSELL_PATTERNS.some(p => title.toLowerCase().includes(p))
+
+  // For each product family, analyze upsell attach rate and AOV impact
+  const upsellAnalysis = {}
+  const heroFamilies = Object.keys(productMap).filter(f => !UPSELL_PATTERNS.some(p => f.toLowerCase().includes(p)))
+
+  heroFamilies.forEach(family => {
+    const stats = { withUpsell: [], withoutUpsell: [] }
+
+    activeOrders.forEach(order => {
+      const hasHero = order.lineItems.some(i => getProductFamily(i.title) === family)
+      if (!hasHero) return
+
+      const hasUpsell = order.lineItems.some(i => isUpsellItem(i.title))
+      const upsellRevenue = order.lineItems
+        .filter(i => isUpsellItem(i.title))
+        .reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
+
+      if (hasUpsell) {
+        stats.withUpsell.push({ total: order.totalPrice, upsellRevenue, paymentType: order.paymentType })
+      } else {
+        stats.withoutUpsell.push({ total: order.totalPrice, paymentType: order.paymentType })
+      }
+    })
+
+    const totalOrders = stats.withUpsell.length + stats.withoutUpsell.length
+    if (totalOrders === 0) return
+
+    upsellAnalysis[family] = {
+      totalOrders,
+      withUpsellCount: stats.withUpsell.length,
+      withoutUpsellCount: stats.withoutUpsell.length,
+      attachRate: stats.withUpsell.length / totalOrders,
+      aovWithUpsell: stats.withUpsell.length > 0 ? stats.withUpsell.reduce((s, o) => s + o.total, 0) / stats.withUpsell.length : 0,
+      aovWithoutUpsell: stats.withoutUpsell.length > 0 ? stats.withoutUpsell.reduce((s, o) => s + o.total, 0) / stats.withoutUpsell.length : 0,
+      aovLift: 0,
+      totalUpsellRevenue: stats.withUpsell.reduce((s, o) => s + o.upsellRevenue, 0),
+      // Prepaid breakdown
+      prepaidWithUpsell: stats.withUpsell.filter(o => o.paymentType === 'prepaid').length,
+      prepaidWithout: stats.withoutUpsell.filter(o => o.paymentType === 'prepaid').length,
+    }
+    const u = upsellAnalysis[family]
+    u.aovLift = u.aovWithoutUpsell > 0 ? (u.aovWithUpsell - u.aovWithoutUpsell) / u.aovWithoutUpsell : 0
+  })
+
   // ====== LOGISTICS (new logic: COD/C2P at 70% dispatch rate) ======
   const nPrepaid = prepaidOrders.length
   const nCodC2p = codC2pOrders.length
@@ -272,7 +319,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       adSpendRatio: expectedRevenue > 0 ? metaSpendForView / expectedRevenue : 0,
       prepaidToAdSpend: metaSpendForView > 0 ? (prepaidRevenue + c2pUpfront) / metaSpendForView : 0 },
     products, orderDetails, allFamilies,
-    metaAllocation,
+    metaAllocation, upsellAnalysis,
   }
 }
 

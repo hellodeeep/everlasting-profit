@@ -465,6 +465,105 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Upsell Analysis */}
+          {ap && ap.upsellAnalysis && Object.keys(ap.upsellAnalysis).length > 0 && !productFilter && (
+            <div className="glass-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-brand-800/20">
+                <h3 className="text-sm font-semibold text-accent">Gift Box Upsell Performance</h3>
+                <p className="text-[10px] text-brand-500 mt-0.5">How many buyers opt for Premium Gift Box and what it does to AOV</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left whitespace-nowrap">
+                  <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Product</th>
+                    <th className="py-2.5 px-2 text-right">Total Orders</th>
+                    <th className="py-2.5 px-2 text-right">With Gift Box</th>
+                    <th className="py-2.5 px-2 text-right">Without</th>
+                    <th className="py-2.5 px-2 text-right">Attach Rate</th>
+                    <th className="py-2.5 px-2 text-right">AOV With</th>
+                    <th className="py-2.5 px-2 text-right">AOV Without</th>
+                    <th className="py-2.5 px-2 text-right">AOV Lift</th>
+                    <th className="py-2.5 px-2 text-right">Upsell Revenue</th>
+                  </tr></thead>
+                  <tbody>
+                    {Object.entries(ap.upsellAnalysis).map(([family, u]) => (
+                      <tr key={family} className="border-b border-brand-800/10 hover:bg-brand-900/20">
+                        <td className="py-2.5 px-3 text-sm text-accent font-medium">{family}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-200">{u.totalOrders}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{u.withUpsellCount}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{u.withoutUpsellCount}</td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-400' : 'text-cash-red'}`}>
+                          {(u.attachRate * 100).toFixed(1)}%
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green font-bold">₹{formatExact(u.aovWithUpsell)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(u.aovWithoutUpsell)}</td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${u.aovLift > 0 ? 'text-cash-green' : 'text-brand-500'}`}>
+                          {u.aovLift > 0 ? `+${(u.aovLift * 100).toFixed(0)}%` : '--'}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-accent">₹{formatExact(u.totalUpsellRevenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className="border-t-2 border-brand-700/50 bg-brand-950/40 text-xs font-mono font-bold">
+                    <td className="py-2.5 px-3 text-accent">TOTAL</td>
+                    <td className="py-2.5 px-2 text-right">{Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.totalOrders, 0)}</td>
+                    <td className="py-2.5 px-2 text-right text-cash-green">{Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.withUpsellCount, 0)}</td>
+                    <td className="py-2.5 px-2 text-right">{Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.withoutUpsellCount, 0)}</td>
+                    <td className="py-2.5 px-2 text-right">
+                      {(() => {
+                        const total = Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.totalOrders, 0)
+                        const withU = Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.withUpsellCount, 0)
+                        return total > 0 ? `${(withU/total*100).toFixed(1)}%` : '--'
+                      })()}
+                    </td>
+                    <td className="py-2.5 px-2 text-right" colSpan={2}></td>
+                    <td className="py-2.5 px-2 text-right"></td>
+                    <td className="py-2.5 px-2 text-right text-accent">₹{formatExact(Object.values(ap.upsellAnalysis).reduce((s,u) => s+u.totalUpsellRevenue, 0))}</td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Upsell for filtered product */}
+          {productFilter && ap?.upsellAnalysis?.[productFilter] && (() => {
+            const u = ap.upsellAnalysis[productFilter]
+            return (
+              <div className="glass-card p-4">
+                <h3 className="text-sm font-semibold text-accent mb-3">Gift Box Upsell: {productFilter}</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div>
+                    <p className="text-[10px] text-brand-500 mb-1">Attach Rate</p>
+                    <p className={`text-xl font-bold font-mono ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-400' : 'text-cash-red'}`}>
+                      {(u.attachRate * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-[10px] text-brand-500 mt-1">{u.withUpsellCount} of {u.totalOrders} orders</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-brand-500 mb-1">AOV With Gift Box</p>
+                    <p className="text-xl font-bold font-mono text-cash-green">₹{formatExact(u.aovWithUpsell)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-brand-500 mb-1">AOV Without</p>
+                    <p className="text-xl font-bold font-mono text-brand-300">₹{formatExact(u.aovWithoutUpsell)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-brand-500 mb-1">AOV Lift</p>
+                    <p className={`text-xl font-bold font-mono ${u.aovLift > 0 ? 'text-cash-green' : 'text-brand-500'}`}>
+                      {u.aovLift > 0 ? `+${(u.aovLift * 100).toFixed(0)}%` : '--'}
+                    </p>
+                    <p className="text-[10px] text-brand-500 mt-1">+₹{formatExact(u.aovWithUpsell - u.aovWithoutUpsell)} per order</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-brand-500 mb-1">Extra Revenue</p>
+                    <p className="text-xl font-bold font-mono text-accent">₹{formatExact(u.totalUpsellRevenue)}</p>
+                    <p className="text-[10px] text-brand-500 mt-1">From gift box add-ons</p>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Variant + Order detail when filtered */}
           {productFilter && p.products.length > 0 && (
             <>
