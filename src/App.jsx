@@ -1,10 +1,11 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { BarChart, Database, Settings, Zap, Target } from 'lucide-react'
+import { BarChart, Database, Settings, Zap, Target, Activity } from 'lucide-react'
 import { DataProvider } from './lib/dataStore'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import Targets from './pages/Targets'
+import MetaAds from './pages/MetaAds'
 import SettingsPage from './pages/Settings'
 
 function Sidebar() {
@@ -33,6 +34,9 @@ function Sidebar() {
         <NavLink to="/targets" className={linkClass}>
           <Target size={18} /> Target vs Reality
         </NavLink>
+        <NavLink to="/meta" className={linkClass}>
+          <Activity size={18} /> Meta Ads
+        </NavLink>
         <NavLink to="/products" className={linkClass}>
           <Database size={18} /> Product Database
         </NavLink>
@@ -57,6 +61,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/targets" element={<Targets />} />
+              <Route path="/meta" element={<MetaAds />} />
               <Route path="/products" element={<Products />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
