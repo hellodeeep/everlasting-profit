@@ -266,34 +266,45 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Product Filter Pills - sorted by order count */}
+      {/* Product Filter - top 6 as pills, rest as dropdown */}
       {ap && (
-        <div className="glass-card p-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Filter size={14} className="text-txt-muted" />
-            <button onClick={() => setProductFilter(null)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${!productFilter ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
-              All Products
-            </button>
-            {sortedFamilies.map(f => {
-              const prod = ap.products.find(p => p.name === f)
-              return (
-                <button key={f} onClick={() => setProductFilter(productFilter === f ? null : f)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${productFilter === f ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
-                  {f}
-                  <span className={`text-[10px] font-mono ${productFilter === f ? 'text-txt-secondary' : 'text-txt-muted'}`}>
-                    {prod?.totalUnits || 0}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+        <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
+          <Filter size={14} className="text-txt-muted" />
+          <button onClick={() => setProductFilter(null)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${!productFilter ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
+            All Products
+          </button>
+          {sortedFamilies.slice(0, 6).map(f => {
+            const prod = ap.products.find(p => p.name === f)
+            return (
+              <button key={f} onClick={() => setProductFilter(productFilter === f ? null : f)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${productFilter === f ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
+                {f}
+                <span className={`text-[10px] font-mono ${productFilter === f ? 'text-brand-200' : 'text-txt-muted'}`}>
+                  {prod?.totalUnits || 0}
+                </span>
+              </button>
+            )
+          })}
+          {sortedFamilies.length > 6 && (
+            <select
+              value={productFilter && !sortedFamilies.slice(0, 6).includes(productFilter) ? productFilter : ''}
+              onChange={e => setProductFilter(e.target.value || null)}
+              className="input-field !w-auto !py-1.5 !px-2 !text-xs !rounded-lg"
+            >
+              <option value="">+{sortedFamilies.length - 6} more</option>
+              {sortedFamilies.slice(6).map(f => {
+                const prod = ap.products.find(p => p.name === f)
+                return <option key={f} value={f}>{f} ({prod?.totalUnits || 0})</option>
+              })}
+            </select>
+          )}
         </div>
       )}
 
-      {productFilter && <div className="glass-card p-2.5 flex items-center justify-between bg-brand-800/20 border-brand-300">
+      {productFilter && <div className="glass-card p-2.5 flex items-center justify-between bg-ev-light">
         <span className="text-sm text-accent font-medium">Filtered: {productFilter}</span>
-        <button onClick={() => setProductFilter(null)} className="flex items-center gap-1 text-xs text-txt-muted hover:text-txt-primary"><X size={12} /> Clear</button>
+        <button onClick={() => setProductFilter(null)} className="flex items-center gap-1 text-xs text-txt-muted hover:text-accent"><X size={12} /> Clear</button>
       </div>}
 
       {error && <div className="glass-card p-4 border-red-200 bg-red-50 flex items-start gap-3">
@@ -301,18 +312,15 @@ export default function Dashboard() {
         <div><p className="text-sm text-cash-red font-medium">Error</p><p className="text-xs text-txt-muted mt-1">{error}</p></div>
       </div>}
 
-      {/* Missing campaign codes warning */}
+      {/* Missing campaign codes - compact */}
       {!productFilter && missingCodes.length > 0 && rawData?.metaCampaigns?.length > 0 && (
-        <div className="glass-card p-3 bg-yellow-50 border-yellow-200 text-xs text-yellow-600 flex items-start gap-2">
-          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-          <div>
-            <span className="font-medium">Missing campaign codes:</span>{' '}
-            {missingCodes.map(p => p.name).join(', ')}.
-            {' '}Add codes in Product Database for per-product Meta spend.
-            {metaAllocation._unallocated_withGST > 0 && (
-              <span className="block mt-1">Unallocated: ₹{formatExact(metaAllocation._unallocated_withGST)} (incl. GST)</span>
-            )}
-          </div>
+        <div className="glass-card p-2.5 bg-yellow-50 border-yellow-200 text-xs text-yellow-700 flex items-center gap-2">
+          <AlertTriangle size={12} className="shrink-0" />
+          <span>{missingCodes.length} products missing campaign codes. </span>
+          <button onClick={() => window.location.href = '/products'} className="underline font-medium">Fix in Products</button>
+          {metaAllocation._unallocated_withGST > 0 && (
+            <span className="ml-auto font-mono">₹{formatExact(metaAllocation._unallocated_withGST)} unallocated</span>
+          )}
         </div>
       )}
 
