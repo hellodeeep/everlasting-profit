@@ -1,0 +1,15 @@
+{
+  "name": "Everlasting Profit Tracker",
+  "short_name": "Everlasting",
+  "description": "Real-time profit tracking for Everlasting",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0910",
+  "theme_color": "#372348",
+  "orientation": "any",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml" },
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

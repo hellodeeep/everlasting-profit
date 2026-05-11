@@ -14,7 +14,7 @@ function Bar({ pct, color = 'bg-brand-500', h = 'h-2.5' }) {
   )
 }
 function Tip({ children }) {
-  return <p className="text-[10px] text-brand-600 mt-1 leading-relaxed">{children}</p>
+  return <p className="text-[10px] text-txt-muted mt-1 leading-relaxed">{children}</p>
 }
 
 // ============ TARGET EDITOR ============
@@ -81,7 +81,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
       </div>
 
       <div className="mb-4">
-        <label className="text-[10px] text-brand-400 uppercase tracking-wider mb-1 block">Target Month</label>
+        <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">Target Month</label>
         <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
       </div>
 
@@ -94,7 +94,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
           const ref = referenceData[p.name]
 
           return (
-            <div key={idx} className="p-4 rounded-xl bg-brand-900/30 border border-brand-800/20">
+            <div key={idx} className="p-4 rounded-xl bg-brand-800/40 border border-brand-300/50">
               {/* Header row */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -102,56 +102,56 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <input className="input-field !py-1 !text-sm !w-16 !text-center font-mono" value={p.code} onChange={e => updateProduct(idx, 'code', e.target.value.toUpperCase())} placeholder="CODE" />
                 </div>
                 <div className="flex items-center gap-2">
-                  {ref && <button onClick={() => useActual(idx)} className="text-[10px] px-2 py-1 rounded bg-brand-800/40 text-yellow-400 hover:bg-brand-700/40">Use actual CAC/AOV</button>}
-                  <button onClick={() => removeProduct(idx)} className="p-1.5 rounded text-brand-500 hover:text-cash-red hover:bg-red-900/20"><Trash2 size={14} /></button>
+                  {ref && <button onClick={() => useActual(idx)} className="text-[10px] px-2 py-1 rounded bg-brand-800/40 text-yellow-600 hover:bg-ev-light">Use actual CAC/AOV</button>}
+                  <button onClick={() => removeProduct(idx)} className="p-1.5 rounded text-txt-muted hover:text-cash-red hover:bg-red-50"><Trash2 size={14} /></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 {/* Monthly Orders */}
                 <div>
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Monthly Orders</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Monthly Orders</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.ordersMonthly || ''} onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
-                  <p className="text-[9px] text-brand-600 mt-0.5">{daily}/day</p>
+                  <p className="text-[9px] text-txt-muted mt-0.5">{daily}/day</p>
                   {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total)</p>}
                 </div>
 
                 {/* Target CAC */}
                 <div>
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Target CAC (pre-GST)</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Target CAC (pre-GST)</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.cac || ''} onChange={e => updateProduct(idx, 'cac', parseInt(e.target.value) || 0)} />
-                  <p className="text-[9px] text-brand-600 mt-0.5">Spend: ₹{formatExact(spend)}/day</p>
+                  <p className="text-[9px] text-txt-muted mt-0.5">Spend: ₹{formatExact(spend)}/day</p>
                   {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>Last 30d: ₹{Math.round(ref.cac)}</p>}
                 </div>
 
                 {/* Target AOV */}
                 <div>
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Target AOV</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Target AOV</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.aov || ''} onChange={e => updateProduct(idx, 'aov', parseInt(e.target.value) || 0)} />
-                  <p className="text-[9px] text-brand-600 mt-0.5">Rev: ₹{formatExact((p.ordersMonthly||0) * (p.aov||0))}/mo</p>
-                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-400'}`}>Last 30d: ₹{Math.round(ref.aov)}</p>}
+                  <p className="text-[9px] text-txt-muted mt-0.5">Rev: ₹{formatExact((p.ordersMonthly||0) * (p.aov||0))}/mo</p>
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-600'}`}>Last 30d: ₹{Math.round(ref.aov)}</p>}
                 </div>
 
                 {/* Vendor Price */}
                 <div>
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Vendor Price ₹</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Vendor Price ₹</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.vendorPrice || ''} onChange={e => updateProduct(idx, 'vendorPrice', parseInt(e.target.value) || 0)} />
-                  <p className="text-[9px] text-brand-600 mt-0.5">COGS per unit</p>
+                  <p className="text-[9px] text-txt-muted mt-0.5">COGS per unit</p>
                 </div>
 
                 {/* Prepaid % */}
                 <div>
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Prepaid %</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Prepaid %</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.prepaidRate || ''} onChange={e => updateProduct(idx, 'prepaidRate', parseInt(e.target.value) || 0)} />
-                  <p className="text-[9px] text-brand-600 mt-0.5">C2P: {p.c2pRate || 10}% | COD: {100 - (p.prepaidRate||75) - (p.c2pRate||10)}%</p>
+                  <p className="text-[9px] text-txt-muted mt-0.5">C2P: {p.c2pRate || 10}% | COD: {100 - (p.prepaidRate||75) - (p.c2pRate||10)}%</p>
                   {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
                 </div>
 
                 {/* Auto-calculated Profit */}
                 <div className="bg-brand-800/20 rounded-lg p-2">
-                  <label className="text-[9px] text-brand-500 uppercase block mb-1">Est. Monthly Profit</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Est. Monthly Profit</label>
                   <p className={`text-lg font-bold font-mono ${est.profitMonthly > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(est.profitMonthly)}</p>
-                  <p className="text-[9px] text-brand-600 mt-0.5">
+                  <p className="text-[9px] text-txt-muted mt-0.5">
                     {(est.profitPct * 100).toFixed(1)}% margin | ₹{Math.round(est.profitPerOrder)}/order
                   </p>
                   {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
@@ -175,10 +175,10 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
         }, { orders: 0, revenue: 0, spend: 0, profit: 0 })
         return (
           <div className="mt-4 p-3 rounded-lg bg-brand-800/20 flex flex-wrap gap-6">
-            <div><p className="text-[9px] text-brand-500 uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-accent">{formatExact(totals.orders)}/mo ({Math.round(totals.orders/daysInMonth)}/day)</p></div>
-            <div><p className="text-[9px] text-brand-500 uppercase">Total Revenue</p><p className="text-sm font-bold font-mono text-accent">₹{formatExact(totals.revenue)}</p></div>
-            <div><p className="text-[9px] text-brand-500 uppercase">Total Meta Spend</p><p className="text-sm font-bold font-mono text-brand-300">₹{formatExact(totals.spend)} (pre-GST)</p></div>
-            <div><p className="text-[9px] text-brand-500 uppercase">Total Est. Profit</p><p className={`text-sm font-bold font-mono ${totals.profit > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(totals.profit)}</p></div>
+            <div><p className="text-[9px] text-txt-muted uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-txt-primary">{formatExact(totals.orders)}/mo ({Math.round(totals.orders/daysInMonth)}/day)</p></div>
+            <div><p className="text-[9px] text-txt-muted uppercase">Total Revenue</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(totals.revenue)}</p></div>
+            <div><p className="text-[9px] text-txt-muted uppercase">Total Meta Spend</p><p className="text-sm font-bold font-mono text-txt-muted">₹{formatExact(totals.spend)} (pre-GST)</p></div>
+            <div><p className="text-[9px] text-txt-muted uppercase">Total Est. Profit</p><p className={`text-sm font-bold font-mono ${totals.profit > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(totals.profit)}</p></div>
           </div>
         )
       })()}
@@ -187,11 +187,11 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {availableProducts.map(dp => (
           <button key={dp.name} onClick={() => addFromDB(dp)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-brand-800/40 text-brand-300 hover:text-accent hover:bg-brand-700/40 border border-brand-700/20">
-            <Plus size={10} /> {dp.name} {dp.campaignCode && <span className="text-[9px] font-mono text-brand-500">{dp.campaignCode}</span>}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-brand-800/40 text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-700/20">
+            <Plus size={10} /> {dp.name} {dp.campaignCode && <span className="text-[9px] font-mono text-txt-muted">{dp.campaignCode}</span>}
           </button>
         ))}
-        <button onClick={addBlank} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-brand-400 hover:text-accent border border-dashed border-brand-700/30 hover:border-brand-500/30">
+        <button onClick={addBlank} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-txt-muted hover:text-accent border border-dashed border-brand-300/50 hover:border-brand-300">
           <Plus size={10} /> Custom
         </button>
       </div>
@@ -319,14 +319,14 @@ export default function Targets() {
   const neededSpendDay = daysRemaining > 0 ? Math.ceil((targets.products.reduce((s,t) => s+t.spendMonthly,0) - aSpend) / daysRemaining) : tSpendDaily
   const neededRevDay = daysRemaining > 0 ? Math.ceil((targets.totalRevenue - aRev) / daysRemaining) : Math.round(targets.totalRevenue / daysTotal)
 
-  // Build last 30 days reference data per product from cache
+  // Build last 7 days reference data per product from dashboard cache
   const referenceData = useMemo(() => {
     const today = new Date()
     const ref = {}
     let allOrders = [], allCampaigns = []
     let daysWithData = 0
 
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 1; i <= 7; i++) {
       const d = new Date(today)
       d.setDate(d.getDate() - i)
       const ds = d.toISOString().split('T')[0]
@@ -374,10 +374,10 @@ export default function Targets() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-accent">Target vs Reality</h2>
-          <p className="text-sm text-brand-400 mt-1">{monthName} | Day {daysElapsed}/{daysTotal} | {cachedDays}/{daysElapsed} days synced</p>
+          <p className="text-sm text-txt-muted mt-1">{monthName} | Day {daysElapsed}/{daysTotal} | {cachedDays}/{daysElapsed} days synced</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setEditing(!editing)} className={`btn-ghost text-sm flex items-center gap-1.5 ${editing ? 'text-yellow-400' : ''}`}>
+          <button onClick={() => setEditing(!editing)} className={`btn-ghost text-sm flex items-center gap-1.5 ${editing ? 'text-yellow-600' : ''}`}>
             <Settings size={14} /> {editing ? 'Editing...' : 'Edit Targets'}
           </button>
           <button onClick={syncMTD} disabled={syncing} className="btn-primary flex items-center gap-2">
@@ -393,8 +393,8 @@ export default function Targets() {
       {syncing && (
         <div className="glass-card p-3">
           <div className="flex justify-between mb-1.5">
-            <span className="text-xs text-brand-400">Fetching {syncProgress.day}...</span>
-            <span className="text-xs font-mono text-accent">{syncProgress.current}/{syncProgress.total}</span>
+            <span className="text-xs text-txt-muted">Fetching {syncProgress.day}...</span>
+            <span className="text-xs font-mono text-txt-primary">{syncProgress.current}/{syncProgress.total}</span>
           </div>
           <Bar pct={syncProgress.total > 0 ? syncProgress.current / syncProgress.total * 100 : 0} />
         </div>
@@ -403,19 +403,19 @@ export default function Targets() {
       {/* Month Progress */}
       <div className="glass-card p-4">
         <div className="flex justify-between mb-2">
-          <span className="text-xs text-brand-400 flex items-center gap-1"><Calendar size={12} /> Month Progress</span>
-          <span className="text-xs font-mono text-accent">{timePct.toFixed(0)}% done | {daysRemaining} days left</span>
+          <span className="text-xs text-txt-muted flex items-center gap-1"><Calendar size={12} /> Month Progress</span>
+          <span className="text-xs font-mono text-txt-primary">{timePct.toFixed(0)}% done | {daysRemaining} days left</span>
         </div>
         <Bar pct={timePct} color="bg-brand-500" h="h-3" />
       </div>
 
-      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-txt-muted mx-auto mb-3 animate-spin" /><p className="text-sm text-txt-muted">Loading cached data...</p></div>}
 
       {ready && !hasFetched && !syncing && (
         <div className="glass-card p-10 text-center">
-          <Target size={48} className="text-brand-600 mx-auto mb-4" />
+          <Target size={48} className="text-txt-muted mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">Sync your data first</h3>
-          <p className="text-sm text-brand-400">Click "Sync Missing Days" above. Each day takes ~2 seconds.</p>
+          <p className="text-sm text-txt-muted">Click "Sync Missing Days" above. Each day takes ~2 seconds.</p>
         </div>
       )}
 
@@ -454,39 +454,39 @@ export default function Targets() {
           return (
             <div className="glass-card p-5 border-l-4 border-l-brand-500">
               <h3 className="text-base font-bold text-accent mb-1">Tomorrow's Game Plan</h3>
-              <p className="text-xs text-brand-400 mb-4">
+              <p className="text-xs text-txt-muted mb-4">
                 {overallOnTrack ? `You're on track overall (${aOrd}/${tOrdMTD} orders by Day ${daysElapsed}). Stay consistent.` : `You're behind by ${formatExact(tOrdMTD - aOrd)} orders. Here's what each product needs:`}
               </p>
               <div className="space-y-4">
                 {productActions.map(pa => (
-                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-900/10 border border-green-800/20' : 'bg-red-900/8 border border-red-800/15'}`}>
+                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.onTrack ? '✓' : '✗'}</span>
                         <h4 className="text-sm font-semibold text-accent">{pa.name}</h4>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-brand-500">{pa.code}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{pa.code}</span>
                       </div>
                       <span className={`text-xs font-mono font-bold ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.aO}/{pa.tO} ({(pa.pct*100).toFixed(0)}%)</span>
                     </div>
                     <div className="space-y-1.5 ml-6">
                       {pa.steps.map((step, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="text-yellow-500 text-xs mt-0.5">{i+1}.</span>
-                          <p className="text-xs text-brand-300 leading-relaxed">{step}</p>
+                          <span className="text-yellow-600 text-xs mt-0.5">{i+1}.</span>
+                          <p className="text-xs text-txt-muted leading-relaxed">{step}</p>
                         </div>
                       ))}
                     </div>
-                    <div className="flex gap-4 ml-6 mt-2 pt-2 border-t border-brand-800/15">
-                      <span className="text-[10px] text-brand-500">Avg: {Math.round(pa.avgDaily)} orders/day</span>
-                      <span className="text-[10px] text-brand-500">Spend: ₹{formatExact(pa.avgSpend)}/day</span>
+                    <div className="flex gap-4 ml-6 mt-2 pt-2 border-t border-brand-300/50/15">
+                      <span className="text-[10px] text-txt-muted">Avg: {Math.round(pa.avgDaily)} orders/day</span>
+                      <span className="text-[10px] text-txt-muted">Spend: ₹{formatExact(pa.avgSpend)}/day</span>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-4 pt-3 border-t border-brand-800/20 flex flex-wrap gap-4">
-                <div className="text-center"><p className="text-[9px] text-brand-500 uppercase">Total Budget</p><p className="text-sm font-bold font-mono text-accent">₹{formatExact(productActions.reduce((s,pa)=>s+pa.needSpend,0))}</p></div>
-                <div className="text-center"><p className="text-[9px] text-brand-500 uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-accent">{productActions.reduce((s,pa)=>s+pa.needOrders,0)}/day</p></div>
-                <div className="text-center"><p className="text-[9px] text-brand-500 uppercase">Revenue Needed</p><p className="text-sm font-bold font-mono text-accent">₹{formatExact(neededRevDay)}/day</p></div>
+              <div className="mt-4 pt-3 border-t border-brand-300/50 flex flex-wrap gap-4">
+                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Total Budget</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(productActions.reduce((s,pa)=>s+pa.needSpend,0))}</p></div>
+                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-txt-primary">{productActions.reduce((s,pa)=>s+pa.needOrders,0)}/day</p></div>
+                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Revenue Needed</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(neededRevDay)}/day</p></div>
               </div>
             </div>
           )
@@ -494,17 +494,17 @@ export default function Targets() {
 
         {/* ============ PRODUCT TRACKER TABLE ============ */}
         <div className="glass-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-brand-800/20"><h3 className="text-sm font-semibold text-accent">Product Tracker</h3></div>
+          <div className="px-5 py-3 border-b border-brand-300/50"><h3 className="text-sm font-semibold text-accent">Product Tracker</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-left whitespace-nowrap">
               <thead>
-                <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                   <th className="py-2.5 px-3" rowSpan={2}>Product</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-800/20" colSpan={5}>Orders / Day</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-800/20" colSpan={4}>Meta Spend / Day (pre-GST)</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-800/20" colSpan={4}>Profit / Day</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={5}>Orders / Day</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Meta Spend / Day (pre-GST)</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Profit / Day</th>
                 </tr>
-                <tr className="border-b border-brand-800/30 text-[9px] text-brand-500 uppercase">
+                <tr className="border-b border-brand-300/50 text-[9px] text-txt-muted uppercase">
                   <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th><th className="py-1.5 px-2 text-right">Need*</th>
                   <th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">CAC</th><th className="py-1.5 px-2 text-right">Need*</th>
                   <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th>
@@ -525,60 +525,60 @@ export default function Targets() {
                   const ordOnTrack = avgOrd >= t.ordersDaily * 0.9
                   const profitOnTrack = avgProfit >= t.profitDaily * 0.9
                   return (
-                    <tr key={t.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
-                      <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-brand-500">{t.code}</span></div></td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{formatExact(t.ordersMonthly)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">{t.ordersDaily}</td>
+                    <tr key={t.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
+                      <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{t.code}</span></div></td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(t.ordersMonthly)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{t.ordersDaily}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ordOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>{Math.round(avgOrd)}</td>
-                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ordOnTrack ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>{ordOnTrack ? 'On Track' : `Behind ${Math.round(t.ordersDaily - avgOrd)}`}</span></td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needOrd > t.ordersDaily * 1.3 ? 'text-cash-red' : needOrd > t.ordersDaily ? 'text-yellow-400' : 'text-cash-green'}`}>{needOrd <= 0 ? '-' : needOrd}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(t.spendDaily)}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${avgSpd > 0 ? 'text-brand-200' : 'text-brand-600'}`}>₹{formatExact(Math.round(avgSpd))}</td>
+                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ordOnTrack ? 'bg-green-50 text-cash-green' : 'bg-red-50 text-cash-red'}`}>{ordOnTrack ? 'On Track' : `Behind ${Math.round(t.ordersDaily - avgOrd)}`}</span></td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needOrd > t.ordersDaily * 1.3 ? 'text-cash-red' : needOrd > t.ordersDaily ? 'text-yellow-600' : 'text-cash-green'}`}>{needOrd <= 0 ? '-' : needOrd}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.spendDaily)}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${avgSpd > 0 ? 'text-txt-secondary' : 'text-txt-muted'}`}>₹{formatExact(Math.round(avgSpd))}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs ${actualCAC <= t.cac ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(actualCAC))}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needSpd > t.spendDaily * 1.3 ? 'text-cash-red' : needSpd > t.spendDaily ? 'text-yellow-400' : 'text-cash-green'}`}>₹{formatExact(Math.round(needSpd))}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">₹{formatExact(t.profitMonthly)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(t.profitDaily)}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needSpd > t.spendDaily * 1.3 ? 'text-cash-red' : needSpd > t.spendDaily ? 'text-yellow-600' : 'text-cash-green'}`}>₹{formatExact(Math.round(needSpd))}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitMonthly)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitDaily)}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${profitOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(avgProfit))}</td>
-                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${profitOnTrack ? 'bg-green-900/20 text-cash-green' : 'bg-red-900/15 text-cash-red'}`}>{profitOnTrack ? 'On Track' : avgProfit > 0 ? `Short ₹${formatExact(Math.round(t.profitDaily - avgProfit))}` : 'Loss'}</span></td>
+                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${profitOnTrack ? 'bg-green-50 text-cash-green' : 'bg-red-50 text-cash-red'}`}>{profitOnTrack ? 'On Track' : avgProfit > 0 ? `Short ₹${formatExact(Math.round(t.profitDaily - avgProfit))}` : 'Loss'}</span></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-2 border-t border-brand-800/10">
+          <div className="px-5 py-2 border-t border-brand-300/50/50">
             <Tip>Need/Day for orders = remaining orders / {daysRemaining} days. Need/Day for spend = orders needed × your actual CAC. Profit/Day shows daily average vs target.</Tip>
           </div>
         </div>
 
         {/* ============ DAILY BREAKDOWN ============ */}
         <div className="glass-card overflow-hidden">
-          <button onClick={() => setShowDaily(!showDaily)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-brand-900/20">
+          <button onClick={() => setShowDaily(!showDaily)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-ev-light">
             <h3 className="text-sm font-semibold text-accent">Daily Breakdown</h3>
-            <ChevronDown size={16} className={`text-brand-400 transition-transform ${showDaily ? 'rotate-180' : ''}`} />
+            <ChevronDown size={16} className={`text-txt-muted transition-transform ${showDaily ? 'rotate-180' : ''}`} />
           </button>
           {showDaily && (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                   <th className="py-2 px-3">Date</th><th className="py-2 px-3 text-right">Orders</th><th className="py-2 px-3 text-right">Revenue</th>
                   <th className="py-2 px-3 text-right">Meta (pre-GST)</th><th className="py-2 px-3 text-right">CAC</th><th className="py-2 px-3 text-right">AOV</th>
                   <th className="py-2 px-3 text-right">Profit</th><th className="py-2 px-3 text-right">Margin</th>
                 </tr></thead>
                 <tbody>
                   {dailyRows.map(r => (
-                    <tr key={r.date} className={`border-b border-brand-800/10 ${r.empty ? 'opacity-30' : 'hover:bg-brand-900/20'}`}>
-                      <td className="py-2 px-3 text-xs font-mono text-brand-300">
+                    <tr key={r.date} className={`border-b border-brand-300/50/50 ${r.empty ? 'opacity-30' : 'hover:bg-ev-light'}`}>
+                      <td className="py-2 px-3 text-xs font-mono text-txt-muted">
                         {new Date(r.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', weekday: 'short' })}
                       </td>
-                      {r.empty ? <td colSpan={7} className="py-2 px-3 text-xs text-brand-600 text-center">Not synced</td> : <>
+                      {r.empty ? <td colSpan={7} className="py-2 px-3 text-xs text-txt-muted text-center">Not synced</td> : <>
                         <td className={`py-2 px-3 text-right font-mono text-xs ${r.orders >= tOrdDaily ? 'text-cash-green' : 'text-cash-red'}`}>{r.orders}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(r.revenue)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-brand-300">₹{formatExact(r.metaSpend / GST)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(r.revenue)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(r.metaSpend / GST)}</td>
                         <td className={`py-2 px-3 text-right font-mono text-xs ${(r.cpp/GST) <= tCACavg ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(r.cpp / GST)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-brand-300">₹{formatExact(r.aov)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(r.aov)}</td>
                         <td className={`py-2 px-3 text-right font-mono text-xs font-bold ${r.profit >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(r.profit)}</td>
-                        <td className={`py-2 px-3 text-right font-mono text-xs ${r.margin >= 0.2 ? 'text-cash-green' : r.margin >= 0 ? 'text-yellow-400' : 'text-cash-red'}`}>{(r.margin*100).toFixed(1)}%</td>
+                        <td className={`py-2 px-3 text-right font-mono text-xs ${r.margin >= 0.2 ? 'text-cash-green' : r.margin >= 0 ? 'text-yellow-600' : 'text-cash-red'}`}>{(r.margin*100).toFixed(1)}%</td>
                       </>}
                     </tr>
                   ))}

@@ -17,12 +17,12 @@ function getDateRange(preset) {
   }
 }
 
-function Stat({ label, value, sub, color = 'text-accent' }) {
+function Stat({ label, value, sub, color = 'text-txt-primary' }) {
   return (
     <div className="glass-card p-4">
-      <p className="text-[10px] text-brand-400 uppercase tracking-wider mb-1.5">{label}</p>
-      <p className={`text-xl font-bold font-mono ${color}`}>{value}</p>
-      {sub && <p className="text-[11px] text-brand-400 mt-1">{sub}</p>}
+      <p className="metric-label mb-2">{label}</p>
+      <p className={`metric-value ${color}`}>{value}</p>
+      {sub && <p className="metric-sub">{sub}</p>}
     </div>
   )
 }
@@ -34,7 +34,7 @@ function SortHeader({ label, sortKey, currentSort, onSort, align = 'right' }) {
       <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''}`}>
         <span>{label}</span>
         {active && (currentSort.dir === 'desc' ? <ChevronDown size={10} /> : <ChevronUp size={10} />)}
-        {!active && <ArrowUpDown size={8} className="text-brand-600" />}
+        {!active && <ArrowUpDown size={8} className="text-txt-muted" />}
       </div>
     </th>
   )
@@ -225,10 +225,10 @@ export default function MetaAds() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-accent">Meta Ads</h2>
-          <p className="text-sm text-brand-400 mt-0.5">{dateLabel || 'Select date range and fetch'}</p>
+          <p className="text-sm text-txt-muted mt-0.5">{dateLabel || 'Select date range and fetch'}</p>
         </div>
         <div className="flex items-center gap-2">
-          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-900/20 px-2.5 py-1 rounded-lg">
+          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-50 px-2.5 py-1 rounded-lg">
             <span>✓</span> Cached
           </div>}
           <button onClick={fetchData} disabled={loading || !dateRange.since} className="btn-primary flex items-center gap-2">
@@ -240,10 +240,10 @@ export default function MetaAds() {
 
       {/* Date */}
       <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
-        <Calendar size={16} className="text-brand-400" />
+        <Calendar size={16} className="text-txt-muted" />
         {presets.map(pr => (
           <button key={pr.key} onClick={() => setPreset(pr.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${preset === pr.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${preset === pr.key ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
             {pr.label}
           </button>
         ))}
@@ -264,8 +264,8 @@ export default function MetaAds() {
           <Stat label="Purchases" value={summary.purchases} sub={`CAC: ₹${formatExact(summary.cpp)}`} color="text-cash-green" />
           <Stat label="Clicks" value={formatExact(summary.clicks)} sub={`CPC: ₹${summary.cpc.toFixed(1)}`} />
           <Stat label="Impressions" value={formatExact(summary.impressions)} sub={`CPM: ₹${summary.cpm.toFixed(0)}`} />
-          <Stat label="CTR" value={`${summary.ctr.toFixed(2)}%`} sub={`${formatExact(summary.clicks)} / ${formatExact(summary.impressions)}`} color={summary.ctr >= 1 ? 'text-cash-green' : 'text-yellow-400'} />
-          <Stat label="Conv Rate" value={`${summary.convRate.toFixed(2)}%`} sub={`${summary.purchases} / ${formatExact(summary.clicks)} clicks`} color={summary.convRate >= 2 ? 'text-cash-green' : 'text-yellow-400'} />
+          <Stat label="CTR" value={`${summary.ctr.toFixed(2)}%`} sub={`${formatExact(summary.clicks)} / ${formatExact(summary.impressions)}`} color={summary.ctr >= 1 ? 'text-cash-green' : 'text-yellow-600'} />
+          <Stat label="Conv Rate" value={`${summary.convRate.toFixed(2)}%`} sub={`${summary.purchases} / ${formatExact(summary.clicks)} clicks`} color={summary.convRate >= 2 ? 'text-cash-green' : 'text-yellow-600'} />
         </div>
 
         {/* Funnel */}
@@ -281,13 +281,13 @@ export default function MetaAds() {
             ].map((step, i, arr) => (
               <React.Fragment key={step.label}>
                 <div className="flex-1 text-center">
-                  <div className={`rounded-lg py-3 px-2 ${i === arr.length - 1 ? 'bg-green-900/20 border border-green-800/20' : 'bg-brand-800/30'}`}>
-                    <p className="text-[10px] text-brand-400 uppercase mb-1">{step.label}</p>
-                    <p className={`text-lg font-bold font-mono ${i === arr.length - 1 ? 'text-cash-green' : 'text-accent'}`}>{formatExact(step.value)}</p>
+                  <div className={`rounded-lg py-3 px-2 ${i === arr.length - 1 ? 'bg-green-50 border border-green-800/20' : 'bg-ev-light'}`}>
+                    <p className="text-[10px] text-txt-muted uppercase mb-1">{step.label}</p>
+                    <p className={`text-lg font-bold font-mono ${i === arr.length - 1 ? 'text-cash-green' : 'text-txt-primary'}`}>{formatExact(step.value)}</p>
                   </div>
-                  {step.rate !== null && <p className="text-[10px] text-brand-500 mt-1">{step.rate.toFixed(1)}% from prev</p>}
+                  {step.rate !== null && <p className="text-[10px] text-txt-muted mt-1">{step.rate.toFixed(1)}% from prev</p>}
                 </div>
-                {i < arr.length - 1 && <div className="text-brand-600 text-xs px-1">→</div>}
+                {i < arr.length - 1 && <div className="text-txt-muted text-xs px-1">→</div>}
               </React.Fragment>
             ))}
           </div>
@@ -296,12 +296,12 @@ export default function MetaAds() {
         {/* Product Breakdown */}
         {productBreakdown.length > 0 && (
           <div className="glass-card overflow-hidden">
-            <div className="px-5 py-3 border-b border-brand-800/20">
+            <div className="px-5 py-3 border-b border-brand-300/50">
               <h3 className="text-sm font-semibold text-accent">Product Performance</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left whitespace-nowrap">
-                <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                   <th className="py-2.5 px-3">Product</th>
                   <th className="py-2.5 px-2 text-right">Camps</th>
                   <th className="py-2.5 px-2 text-right">Spend</th>
@@ -316,32 +316,32 @@ export default function MetaAds() {
                 </tr></thead>
                 <tbody>
                   {productBreakdown.map(p => (
-                    <tr key={p.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
+                    <tr key={p.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-accent">{p.name}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-brand-500">{p.code}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{p.code}</span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{p.campaigns}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-accent">₹{formatExact(p.spend)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">{formatExact(p.impressions)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-200">{formatExact(p.clicks)}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${p.ctr >= 1 ? 'text-cash-green' : 'text-yellow-400'}`}>{p.ctr.toFixed(2)}%</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{p.cpc.toFixed(1)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">{p.atc}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{p.campaigns}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-primary">₹{formatExact(p.spend)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(p.impressions)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{formatExact(p.clicks)}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${p.ctr >= 1 ? 'text-cash-green' : 'text-yellow-600'}`}>{p.ctr.toFixed(2)}%</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{p.cpc.toFixed(1)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{p.atc}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{p.purchases}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${p.cpp > 0 && p.cpp <= 500 ? 'text-cash-green' : p.cpp > 500 ? 'text-cash-red' : 'text-brand-500'}`}>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${p.cpp > 0 && p.cpp <= 500 ? 'text-cash-green' : p.cpp > 500 ? 'text-cash-red' : 'text-txt-muted'}`}>
                         {p.purchases > 0 ? `₹${formatExact(p.cpp)}` : '--'}
                       </td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${p.convRate >= 2 ? 'text-cash-green' : 'text-yellow-400'}`}>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${p.convRate >= 2 ? 'text-cash-green' : 'text-yellow-600'}`}>
                         {p.clicks > 0 ? `${p.convRate.toFixed(2)}%` : '--'}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot><tr className="border-t-2 border-brand-700/50 bg-brand-950/40 text-xs font-mono font-bold">
-                  <td className="py-2.5 px-3 text-accent">TOTAL</td>
+                <tfoot><tr className="border-t-2 border-brand-300 bg-ev-light text-xs font-mono font-bold">
+                  <td className="py-2.5 px-3 text-txt-primary">TOTAL</td>
                   <td className="py-2.5 px-2 text-right">{productBreakdown.reduce((s,p)=>s+p.campaigns,0)}</td>
                   <td className="py-2.5 px-2 text-right">₹{formatExact(summary.spend)}</td>
                   <td className="py-2.5 px-2 text-right">{formatExact(summary.impressions)}</td>
@@ -364,10 +364,10 @@ export default function MetaAds() {
             <div className="glass-card p-4">
               <h3 className="text-sm font-semibold text-cash-green mb-3 flex items-center gap-2"><TrendingUp size={14} /> Top 5 Lowest CAC Ads</h3>
               {topPerformers.winners.map((c, i) => (
-                <div key={c.adId || c.campaignId} className="flex items-center justify-between py-2 border-b border-brand-800/10 last:border-0">
+                <div key={c.adId || c.campaignId} className="flex items-center justify-between py-2 border-b border-brand-300/50/50 last:border-0">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-brand-200 truncate">{c.adName || c.campaignName}</p>
-                    <p className="text-[10px] text-brand-500">{c.purchases} purchases | ₹{formatExact(c.spend)} spend | ROAS {c.roas > 0 ? c.roas.toFixed(1) + 'x' : '--'}</p>
+                    <p className="text-xs text-txt-secondary truncate">{c.adName || c.campaignName}</p>
+                    <p className="text-[10px] text-txt-muted">{c.purchases} purchases | ₹{formatExact(c.spend)} spend | ROAS {c.roas > 0 ? c.roas.toFixed(1) + 'x' : '--'}</p>
                   </div>
                   <span className="text-sm font-bold font-mono text-cash-green ml-3">₹{formatExact(c.cpp)}</span>
                 </div>
@@ -376,10 +376,10 @@ export default function MetaAds() {
             <div className="glass-card p-4">
               <h3 className="text-sm font-semibold text-cash-red mb-3 flex items-center gap-2"><TrendingDown size={14} /> Top 5 Highest CAC Ads</h3>
               {topPerformers.losers.map((c, i) => (
-                <div key={c.adId || c.campaignId} className="flex items-center justify-between py-2 border-b border-brand-800/10 last:border-0">
+                <div key={c.adId || c.campaignId} className="flex items-center justify-between py-2 border-b border-brand-300/50/50 last:border-0">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-brand-200 truncate">{c.adName || c.campaignName}</p>
-                    <p className="text-[10px] text-brand-500">{c.purchases} purchases | ₹{formatExact(c.spend)} spend | ROAS {c.roas > 0 ? c.roas.toFixed(1) + 'x' : '--'}</p>
+                    <p className="text-xs text-txt-secondary truncate">{c.adName || c.campaignName}</p>
+                    <p className="text-[10px] text-txt-muted">{c.purchases} purchases | ₹{formatExact(c.spend)} spend | ROAS {c.roas > 0 ? c.roas.toFixed(1) + 'x' : '--'}</p>
                   </div>
                   <span className="text-sm font-bold font-mono text-cash-red ml-3">₹{formatExact(c.cpp)}</span>
                 </div>
@@ -396,22 +396,22 @@ export default function MetaAds() {
           const totalWasted = wasters.reduce((s,c) => s + c.spend, 0)
           return (
             <div className="glass-card p-4">
-              <h3 className="text-sm font-semibold text-yellow-400 mb-1 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-yellow-600 mb-1 flex items-center gap-2">
                 <AlertTriangle size={14} /> Spend Wasters ({wasters.length} ads, ₹{formatExact(totalWasted)} spent with 0 purchases)
               </h3>
-              <p className="text-[10px] text-brand-500 mb-3">These ads spent ₹100+ but got zero purchases. Consider pausing them.</p>
+              <p className="text-[10px] text-txt-muted mb-3">These ads spent ₹100+ but got zero purchases. Consider pausing them.</p>
               <div className="space-y-1.5">
                 {wasters.slice(0, 10).map((c, i) => (
                   <div key={c.adId || c.campaignId || i} className="flex items-center justify-between py-1.5 px-2 rounded bg-brand-800/20">
-                    <span className="text-xs text-brand-300 truncate flex-1">{c.adName || c.campaignName}</span>
-                    <div className="flex gap-4 ml-3 text-[10px] font-mono text-brand-400 shrink-0">
+                    <span className="text-xs text-txt-muted truncate flex-1">{c.adName || c.campaignName}</span>
+                    <div className="flex gap-4 ml-3 text-[10px] font-mono text-txt-muted shrink-0">
                       <span>₹{formatExact(c.spend)}</span>
                       <span>{formatExact(c.clicks)} clicks</span>
                       <span>{c.atc} ATC</span>
                     </div>
                   </div>
                 ))}
-                {wasters.length > 10 && <p className="text-[10px] text-brand-500 mt-1">...and {wasters.length - 10} more</p>}
+                {wasters.length > 10 && <p className="text-[10px] text-txt-muted mt-1">...and {wasters.length - 10} more</p>}
               </div>
             </div>
           )
@@ -421,22 +421,22 @@ export default function MetaAds() {
         <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
           {[{ key: 'ads', label: 'Ads' }, { key: 'adsets', label: 'Ad Sets' }, { key: 'campaigns', label: 'Campaigns' }].map(v => (
             <button key={v.key} onClick={() => setView(v.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${view === v.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${view === v.key ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
               {v.label}
             </button>
           ))}
-          <div className="h-5 w-px bg-brand-800/30 mx-1" />
+          <div className="h-5 w-px bg-ev-light mx-1" />
           <button onClick={() => setProductFilter(null)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!productFilter ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!productFilter ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
             All Products
           </button>
           {productBreakdown.filter(p => p.code !== '--').map(p => (
             <button key={p.name} onClick={() => setProductFilter(productFilter === p.name ? null : p.name)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${productFilter === p.name ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${productFilter === p.name ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
               {p.name}
             </button>
           ))}
-          <label className="ml-auto flex items-center gap-2 text-xs text-brand-400 cursor-pointer">
+          <label className="ml-auto flex items-center gap-2 text-xs text-txt-muted cursor-pointer">
             <input type="checkbox" checked={showZeroSpend} onChange={e => setShowZeroSpend(e.target.checked)} className="rounded bg-brand-800 border-brand-600" />
             Show zero spend
           </label>
@@ -446,8 +446,8 @@ export default function MetaAds() {
         <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left whitespace-nowrap">
-              <thead className="sticky top-0 bg-brand-900/95 backdrop-blur">
-                <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+              <thead className="sticky top-0 bg-white/95 backdrop-blur">
+                <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                   <th className="py-2.5 px-3 text-left">
                     {view === 'ads' ? 'Ad' : view === 'adsets' ? 'Ad Set' : 'Campaign'}
                   </th>
@@ -469,28 +469,28 @@ export default function MetaAds() {
                   const name = view === 'ads' ? r.adName : view === 'adsets' ? r.adsetName : r.campaignName
                   // Verdict: green if purchases > 0 and CAC is reasonable, red if spend > 0 and 0 purchases, yellow if CAC is high
                   let verdict = '', verdictColor = ''
-                  if (r.purchases > 0 && r.cpp <= 500) { verdict = 'Winner'; verdictColor = 'bg-green-900/20 text-cash-green' }
-                  else if (r.purchases > 0 && r.cpp <= 800) { verdict = 'OK'; verdictColor = 'bg-yellow-900/20 text-yellow-400' }
+                  if (r.purchases > 0 && r.cpp <= 500) { verdict = 'Winner'; verdictColor = 'bg-green-50 text-cash-green' }
+                  else if (r.purchases > 0 && r.cpp <= 800) { verdict = 'OK'; verdictColor = 'bg-yellow-50 text-yellow-600' }
                   else if (r.purchases > 0) { verdict = 'Expensive'; verdictColor = 'bg-red-900/15 text-cash-red' }
-                  else if (r.spend > 500) { verdict = 'Kill'; verdictColor = 'bg-red-900/20 text-cash-red' }
-                  else if (r.spend > 0) { verdict = 'Testing'; verdictColor = 'bg-brand-800/30 text-brand-400' }
-                  else { verdict = '--'; verdictColor = 'text-brand-600' }
+                  else if (r.spend > 500) { verdict = 'Kill'; verdictColor = 'bg-red-50 text-cash-red' }
+                  else if (r.spend > 0) { verdict = 'Testing'; verdictColor = 'bg-ev-light text-txt-muted' }
+                  else { verdict = '--'; verdictColor = 'text-txt-muted' }
 
                   return (
-                    <tr key={`${r.campaignId}-${r.adsetId || ''}-${r.adId || i}`} className="border-b border-brand-800/5 hover:bg-brand-900/20">
-                      <td className="py-2 px-3 text-xs text-brand-200 max-w-[250px] truncate" title={name}>{name}</td>
-                      {view === 'ads' && <td className="py-2 px-2 text-xs text-brand-500 max-w-[150px] truncate" title={r.campaignName}>{r.campaignName}</td>}
-                      <td className="py-2 px-2 text-right font-mono text-xs text-accent">₹{formatExact(r.spend)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-xs text-brand-400">{formatExact(r.impressions)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-xs text-brand-300">{formatExact(r.clicks)}</td>
-                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.ctr >= 1.5 ? 'text-cash-green' : r.ctr >= 0.8 ? 'text-yellow-400' : 'text-cash-red'}`}>{r.ctr.toFixed(2)}%</td>
-                      <td className="py-2 px-2 text-right font-mono text-xs text-brand-300">₹{r.cpc.toFixed(1)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-xs text-brand-400">{r.atc}</td>
-                      <td className={`py-2 px-2 text-right font-mono text-xs font-bold ${r.purchases > 0 ? 'text-cash-green' : 'text-brand-600'}`}>{r.purchases}</td>
-                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.cpp > 0 && r.cpp <= 500 ? 'text-cash-green' : r.cpp > 500 ? 'text-cash-red' : 'text-brand-600'}`}>
+                    <tr key={`${r.campaignId}-${r.adsetId || ''}-${r.adId || i}`} className="border-b border-brand-300/50/5 hover:bg-ev-light">
+                      <td className="py-2 px-3 text-xs text-txt-secondary max-w-[250px] truncate" title={name}>{name}</td>
+                      {view === 'ads' && <td className="py-2 px-2 text-xs text-txt-muted max-w-[150px] truncate" title={r.campaignName}>{r.campaignName}</td>}
+                      <td className="py-2 px-2 text-right font-mono text-xs text-txt-primary">₹{formatExact(r.spend)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(r.impressions)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(r.clicks)}</td>
+                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.ctr >= 1.5 ? 'text-cash-green' : r.ctr >= 0.8 ? 'text-yellow-600' : 'text-cash-red'}`}>{r.ctr.toFixed(2)}%</td>
+                      <td className="py-2 px-2 text-right font-mono text-xs text-txt-muted">₹{r.cpc.toFixed(1)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-xs text-txt-muted">{r.atc}</td>
+                      <td className={`py-2 px-2 text-right font-mono text-xs font-bold ${r.purchases > 0 ? 'text-cash-green' : 'text-txt-muted'}`}>{r.purchases}</td>
+                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.cpp > 0 && r.cpp <= 500 ? 'text-cash-green' : r.cpp > 500 ? 'text-cash-red' : 'text-txt-muted'}`}>
                         {r.purchases > 0 ? `₹${formatExact(r.cpp)}` : r.spend > 0 ? '∞' : '--'}
                       </td>
-                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.roas >= 2 ? 'text-cash-green' : r.roas > 0 ? 'text-yellow-400' : 'text-brand-600'}`}>
+                      <td className={`py-2 px-2 text-right font-mono text-xs ${r.roas >= 2 ? 'text-cash-green' : r.roas > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>
                         {r.roas > 0 ? `${r.roas.toFixed(2)}x` : '--'}
                       </td>
                       <td className="py-2 px-2 text-right">
@@ -502,27 +502,27 @@ export default function MetaAds() {
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-2 border-t border-brand-800/10 flex items-center justify-between">
-            <span className="text-[10px] text-brand-600">
+          <div className="px-5 py-2 border-t border-brand-300/50/50 flex items-center justify-between">
+            <span className="text-[10px] text-txt-muted">
               {displayRows.length} {view === 'ads' ? 'ads' : view === 'adsets' ? 'ad sets' : 'campaigns'}
               {productFilter && ` for ${productFilter}`} | Click headers to sort
             </span>
             <div className="flex gap-3 text-[10px]">
               <span className="text-cash-green">Winner: CAC under 500</span>
-              <span className="text-yellow-400">OK: CAC under 800</span>
+              <span className="text-yellow-600">OK: CAC under 800</span>
               <span className="text-cash-red">Expensive/Kill: high CAC or 0 purchases</span>
             </div>
           </div>
         </div>
       </>)}
 
-      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-txt-muted mx-auto mb-3 animate-spin" /><p className="text-sm text-txt-muted">Loading cached data...</p></div>}
 
       {ready && !summary && !loading && (
         <div className="glass-card p-12 text-center">
-          <Zap size={48} className="text-brand-600 mx-auto mb-4" />
+          <Zap size={48} className="text-txt-muted mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-accent mb-2">Meta Ad Analytics</h3>
-          <p className="text-sm text-brand-400">Select a date range and click Fetch Meta Data to see campaign performance, product breakdown, and spend analysis.</p>
+          <p className="text-sm text-txt-muted">Select a date range and click Fetch Meta Data to see campaign performance, product breakdown, and spend analysis.</p>
         </div>
       )}
     </div>

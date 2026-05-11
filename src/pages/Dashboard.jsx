@@ -24,21 +24,21 @@ function shiftDate(dateStr, days) {
   return d.toISOString().split('T')[0]
 }
 
-function Stat({ label, value, sub, color = 'text-accent' }) {
+function Stat({ label, value, sub, color = 'text-txt-primary' }) {
   return (
     <div className="glass-card glass-card-hover p-4 fade-in">
-      <p className="text-[10px] text-brand-400 uppercase tracking-wider font-medium mb-1.5">{label}</p>
-      <p className={`text-xl font-bold font-mono stat-glow ${color}`}>{value}</p>
-      {sub && <p className="text-[11px] text-brand-400 mt-1">{sub}</p>}
+      <p className="metric-label mb-2">{label}</p>
+      <p className={`metric-value ${color}`}>{value}</p>
+      {sub && <p className="metric-sub">{sub}</p>}
     </div>
   )
 }
 
 function PnLLine({ label, value, indent, bold }) {
   return (
-    <div className={`flex justify-between py-1.5 ${indent ? 'pl-6' : ''} ${bold ? 'border-t border-brand-800/30 pt-2 mt-1' : ''}`}>
-      <span className={`text-sm ${bold ? 'text-accent font-semibold' : 'text-brand-300'}`}>{label}</span>
-      <span className={`font-mono text-sm ${bold ? 'font-bold text-accent' : 'text-brand-200'}`}>{value}</span>
+    <div className={`flex justify-between py-1.5 ${indent ? 'pl-6' : ''} ${bold ? 'border-t border-brand-300/50 pt-2.5 mt-1.5' : ''}`}>
+      <span className={`text-sm ${bold ? 'text-txt-primary font-semibold' : 'text-txt-muted'}`}>{label}</span>
+      <span className={`font-mono text-sm ${bold ? 'font-bold text-txt-primary' : 'text-txt-secondary'}`}>{value}</span>
     </div>
   )
 }
@@ -206,15 +206,15 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-accent">{productFilter || 'Profit Dashboard'}</h2>
-          <p className="text-sm text-brand-400 mt-0.5">
+          <h2 className="text-2xl font-bold text-txt-primary">{productFilter || 'Profit Dashboard'}</h2>
+          <p className="text-sm text-txt-muted mt-0.5">
             {dateLabel || 'Select a date range'}
-            {rawData?.apiMeta && <span className="text-brand-600 ml-2">({rawData.apiMeta.rawOrderCount} orders)</span>}
+            {rawData?.apiMeta && <span className="text-txt-muted ml-2">({rawData.apiMeta.rawOrderCount} orders)</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-900/20 px-2.5 py-1 rounded-lg">
-            <Check size={10} /> Cached {lastFetch && <span className="text-brand-500">{lastFetch.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'})}</span>}
+          {isCached && <div className="flex items-center gap-1.5 text-xs text-cash-green bg-green-50 px-2.5 py-1 rounded-lg">
+            <Check size={10} /> Cached {lastFetch && <span className="text-txt-muted">{lastFetch.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'})}</span>}
           </div>}
           {ap && <button onClick={() => exportCSV(ap, dateLabel)} className="btn-ghost flex items-center gap-1.5 text-xs">
             <Download size={12} /> CSV
@@ -229,17 +229,17 @@ export default function Dashboard() {
       {/* Date Range */}
       <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
         {canNavigateDay && (
-          <button onClick={() => goDay(-1)} className="p-1.5 rounded-lg text-brand-400 hover:text-accent hover:bg-brand-800/40">
+          <button onClick={() => goDay(-1)} className="p-1.5 rounded-lg text-txt-muted hover:text-accent hover:bg-ev-light">
             <ChevronLeft size={16} />
           </button>
         )}
-        <Calendar size={16} className="text-brand-400" />
+        <Calendar size={16} className="text-txt-muted" />
         {presets.map(pr => {
           const range = pr.key !== 'custom' ? getDateRange(pr.key) : null
           const hasCached = range ? !!getCachedData(range.since, range.until) : false
           return (
             <button key={pr.key} onClick={() => { setPreset(pr.key); setProductFilter(null) }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${preset === pr.key ? 'bg-brand-700 text-accent border border-brand-500/30' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${preset === pr.key ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
               {pr.label}
               {hasCached && preset !== pr.key && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cash-green" />}
             </button>
@@ -247,7 +247,7 @@ export default function Dashboard() {
         })}
         {canNavigateDay && (
           <button onClick={() => goDay(1)} disabled={dateRange.since >= new Date().toISOString().split('T')[0]}
-            className="p-1.5 rounded-lg text-brand-400 hover:text-accent hover:bg-brand-800/40 disabled:opacity-30 disabled:cursor-not-allowed">
+            className="p-1.5 rounded-lg text-txt-muted hover:text-accent hover:bg-ev-light disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronRight size={16} />
           </button>
         )}
@@ -261,7 +261,7 @@ export default function Dashboard() {
 
       {/* Not cached notice */}
       {!isCached && dateRange.since && !loading && (
-        <div className="glass-card p-3 bg-brand-900/30 text-sm text-brand-400 flex items-center gap-2">
+        <div className="glass-card p-3 bg-brand-800/40 text-sm text-txt-muted flex items-center gap-2">
           <Clock size={14} /> No data for {dateLabel}. Click {isCached ? 'Refresh' : 'Fetch Data'} to load.
         </div>
       )}
@@ -270,18 +270,18 @@ export default function Dashboard() {
       {ap && (
         <div className="glass-card p-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <Filter size={14} className="text-brand-400" />
+            <Filter size={14} className="text-txt-muted" />
             <button onClick={() => setProductFilter(null)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${!productFilter ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${!productFilter ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
               All Products
             </button>
             {sortedFamilies.map(f => {
               const prod = ap.products.find(p => p.name === f)
               return (
                 <button key={f} onClick={() => setProductFilter(productFilter === f ? null : f)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${productFilter === f ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-accent hover:bg-brand-800/40 border border-brand-800/20'}`}>
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${productFilter === f ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
                   {f}
-                  <span className={`text-[10px] font-mono ${productFilter === f ? 'text-brand-200' : 'text-brand-600'}`}>
+                  <span className={`text-[10px] font-mono ${productFilter === f ? 'text-txt-secondary' : 'text-txt-muted'}`}>
                     {prod?.totalUnits || 0}
                   </span>
                 </button>
@@ -291,19 +291,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      {productFilter && <div className="glass-card p-2.5 flex items-center justify-between bg-brand-800/20 border-brand-500/20">
+      {productFilter && <div className="glass-card p-2.5 flex items-center justify-between bg-brand-800/20 border-brand-300">
         <span className="text-sm text-accent font-medium">Filtered: {productFilter}</span>
-        <button onClick={() => setProductFilter(null)} className="flex items-center gap-1 text-xs text-brand-400 hover:text-accent"><X size={12} /> Clear</button>
+        <button onClick={() => setProductFilter(null)} className="flex items-center gap-1 text-xs text-txt-muted hover:text-txt-primary"><X size={12} /> Clear</button>
       </div>}
 
-      {error && <div className="glass-card p-4 border-cash-red/30 bg-red-900/10 flex items-start gap-3">
+      {error && <div className="glass-card p-4 border-red-200 bg-red-50 flex items-start gap-3">
         <AlertCircle size={18} className="text-cash-red mt-0.5" />
-        <div><p className="text-sm text-cash-red font-medium">Error</p><p className="text-xs text-brand-400 mt-1">{error}</p></div>
+        <div><p className="text-sm text-cash-red font-medium">Error</p><p className="text-xs text-txt-muted mt-1">{error}</p></div>
       </div>}
 
       {/* Missing campaign codes warning */}
       {!productFilter && missingCodes.length > 0 && rawData?.metaCampaigns?.length > 0 && (
-        <div className="glass-card p-3 bg-yellow-900/10 border-yellow-500/15 text-xs text-yellow-400 flex items-start gap-2">
+        <div className="glass-card p-3 bg-yellow-50 border-yellow-200 text-xs text-yellow-600 flex items-start gap-2">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
           <div>
             <span className="font-medium">Missing campaign codes:</span>{' '}
@@ -322,12 +322,12 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <Stat label="Total Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
             <Stat label="Prepaid %" value={formatPercent(p.overview.prepaidRate)} sub={`${p.overview.prepaidOrders} orders`} color="text-cash-green" />
-            <Stat label="C2P %" value={formatPercent(p.overview.c2pRate)} sub={`${p.overview.c2pOrders} orders (₹150 ea)`} color="text-yellow-400" />
-            <Stat label="COD %" value={formatPercent(p.overview.codRate)} sub={`${p.overview.codOrders} orders (30% del)`} color="text-brand-300" />
+            <Stat label="C2P %" value={formatPercent(p.overview.c2pRate)} sub={`${p.overview.c2pOrders} orders (₹150 ea)`} color="text-yellow-600" />
+            <Stat label="COD %" value={formatPercent(p.overview.codRate)} sub={`${p.overview.codOrders} orders (30% del)`} color="text-txt-muted" />
             <Stat label="AOV (incl. upsells)" value={`₹${formatExact(p.metrics.aov)}`} sub="Full order value / orders" />
             <Stat label="CAC (incl. GST)" value={`₹${formatExact(p.metrics.cacWithGST)}`}
               sub={`Pre-GST: ₹${formatExact(p.metrics.cacPreGST)}`}
-              color={p.metrics.cacPreGST > 0 && p.metrics.cacPreGST <= 500 ? 'text-cash-green' : p.metrics.cacPreGST > 500 ? 'text-cash-red' : 'text-brand-300'} />
+              color={p.metrics.cacPreGST > 0 && p.metrics.cacPreGST <= 500 ? 'text-cash-green' : p.metrics.cacPreGST > 500 ? 'text-cash-red' : 'text-txt-muted'} />
           </div>
 
           {/* Row 2: Revenue & Profit */}
@@ -335,10 +335,10 @@ export default function Dashboard() {
             <Stat label="Prepaid Revenue (incl. C2P)" value={`₹${formatExact(p.revenue.prepaidRevenueTotal)}`}
               sub={`Prepaid: ₹${formatExact(p.revenue.prepaidRevenue)} + C2P: ₹${formatExact(p.revenue.c2pUpfront)}`} color="text-cash-green" />
             <Stat label="COD Expected Revenue" value={`₹${formatExact(p.revenue.codRevenueExpected)}`}
-              sub="COD + C2P remaining at 30%" color="text-brand-300" />
+              sub="COD + C2P remaining at 30%" color="text-txt-muted" />
             <Stat label="Meta Spend (incl. GST)" value={`₹${formatExact(p.expenses.metaAds)}`}
               sub={`Prepaid Rev / Ad Spend: ${p.metrics.prepaidToAdSpend > 0 ? (p.metrics.prepaidToAdSpend * 100).toFixed(0) + '%' : '--'}`}
-              color={p.metrics.prepaidToAdSpend > 1.5 ? 'text-cash-green' : p.metrics.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-brand-300'} />
+              color={p.metrics.prepaidToAdSpend > 1.5 ? 'text-cash-green' : p.metrics.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-txt-muted'} />
             <Stat label="Expected Profit" value={`₹${formatExact(p.profit.expected)}`}
               sub={`${formatPercent(p.profit.margin)} margin | ₹${Math.round(p.profit.perOrder)}/order`}
               color={p.profit.expected >= 0 ? 'text-cash-green' : 'text-cash-red'} />
@@ -348,19 +348,19 @@ export default function Dashboard() {
 
           {/* P&L */}
           <div className="glass-card overflow-hidden">
-            <button onClick={() => setShowPnL(!showPnL)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-brand-900/20">
+            <button onClick={() => setShowPnL(!showPnL)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-ev-light">
               <h3 className="text-sm font-semibold text-accent">P&L Statement</h3>
-              <ChevronDown size={16} className={`text-brand-400 transition-transform ${showPnL ? 'rotate-180' : ''}`} />
+              <ChevronDown size={16} className={`text-txt-muted transition-transform ${showPnL ? 'rotate-180' : ''}`} />
             </button>
             {showPnL && (
-              <div className="px-5 py-3 border-t border-brand-800/20">
-                <div className="text-[10px] text-brand-500 uppercase tracking-wider mb-1">Income</div>
+              <div className="px-5 py-3 border-t border-brand-300/50">
+                <div className="text-[10px] text-txt-muted uppercase tracking-wider mb-1">Income</div>
                 <PnLLine label="Prepaid (Cashfree)" value={`₹${formatExact(p.revenue.prepaidRevenue)}`} indent />
                 <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.revenue.c2pUpfront)}`} indent />
                 <PnLLine label="C2P COD portion (30%)" value={`₹${formatExact(Math.max(0, p.revenue.c2pExpected - (p.revenue.c2pUpfront || p.overview.c2pOrders * 150)))}`} indent />
                 <PnLLine label="COD revenue (30%)" value={`₹${formatExact(p.revenue.codExpected)}`} indent />
                 <PnLLine label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`} bold />
-                <div className="text-[10px] text-brand-500 uppercase tracking-wider mt-3 mb-1">Expenses</div>
+                <div className="text-[10px] text-txt-muted uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
                 <PnLLine label="COGS (Vendor)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
                 <PnLLine label={`Boxes (${p.overview.boxOrders || p.overview.totalOrders} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
@@ -383,13 +383,13 @@ export default function Dashboard() {
           {/* Product Table */}
           {!productFilter && ap && (
             <div className="glass-card overflow-hidden">
-              <div className="px-5 py-3 border-b border-brand-800/20">
+              <div className="px-5 py-3 border-b border-brand-300/50">
                 <h3 className="text-sm font-semibold text-accent">Product Breakdown -- click to drill in</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left whitespace-nowrap">
                   <thead>
-                    <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                    <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                       <th className="py-2.5 px-3">Product</th>
                       <th className="py-2.5 px-2 text-right">Orders</th>
                       <th className="py-2.5 px-2 text-right">Prepaid%</th>
@@ -408,45 +408,45 @@ export default function Dashboard() {
                   <tbody>
                     {ap.products.map(prod => (
                       <tr key={prod.name} onClick={() => setProductFilter(prod.name)}
-                        className="border-b border-brand-800/10 hover:bg-brand-700/20 cursor-pointer group">
-                        <td className="py-2.5 px-3 text-sm font-medium group-hover:text-white">
+                        className="border-b border-brand-300/50/50 hover:bg-ev-light cursor-pointer group">
+                        <td className="py-2.5 px-3 text-sm font-medium group-hover:text-txt-primary">
                           <div className="flex items-center gap-1.5">
-                            <ChevronRight size={12} className="text-brand-500 group-hover:text-accent" />
+                            <ChevronRight size={12} className="text-txt-muted group-hover:text-accent" />
                             <span className="text-accent">{prod.name}</span>
-                            {!prod.hasCampaignCode && rawData?.metaCampaigns?.length > 0 && <AlertTriangle size={10} className="text-yellow-500" />}
+                            {!prod.hasCampaignCode && rawData?.metaCampaigns?.length > 0 && <AlertTriangle size={10} className="text-yellow-600" />}
                           </div>
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-accent">{prod.orderCount}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-txt-primary">{prod.orderCount}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{(prod.prepaidPct*100).toFixed(0)}%</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-yellow-400">{(prod.c2pPct*100).toFixed(0)}%</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">{(prod.codPct*100).toFixed(0)}%</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-200">₹{formatExact(prod.aovWithUpsells)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-yellow-600">{(prod.c2pPct*100).toFixed(0)}%</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{(prod.codPct*100).toFixed(0)}%</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">₹{formatExact(prod.aovWithUpsells)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">₹{formatExact(prod.prepaidRevenueTotal)}</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">₹{formatExact(prod.codRevenueExpected)}</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-300">
-                          {prod.hasCampaignCode ? `₹${formatExact(prod.metaSpend)}` : <span className="text-yellow-500">--</span>}
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(prod.codRevenueExpected)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">
+                          {prod.hasCampaignCode ? `₹${formatExact(prod.metaSpend)}` : <span className="text-yellow-600">--</span>}
                         </td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.cacWithGST > 0 ? 'text-brand-200' : 'text-brand-500') : 'text-yellow-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.cacWithGST > 0 ? 'text-txt-secondary' : 'text-txt-muted') : 'text-yellow-600'}`}>
                           {prod.hasCampaignCode ? (prod.cacWithGST > 0 ? `₹${formatExact(prod.cacWithGST)}` : '--') : '--'}
                         </td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.prepaidToAdSpend >= 1.5 ? 'text-cash-green' : prod.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-brand-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.prepaidToAdSpend >= 1.5 ? 'text-cash-green' : prod.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-txt-muted'}`}>
                           {prod.hasCampaignCode && prod.prepaidToAdSpend > 0 ? `${(prod.prepaidToAdSpend*100).toFixed(0)}%` : '--'}
                         </td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${prod.hasCampaignCode ? (prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red') : 'text-yellow-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${prod.hasCampaignCode ? (prod.profit >= 0 ? 'text-cash-green' : 'text-cash-red') : 'text-yellow-600'}`}>
                           {prod.hasCampaignCode ? `₹${formatExact(prod.profit)}` : '--'}
                         </td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-400' : 'text-cash-red') : 'text-yellow-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.hasCampaignCode ? (prod.margin >= 0.2 ? 'text-cash-green' : prod.margin >= 0 ? 'text-yellow-600' : 'text-cash-red') : 'text-yellow-600'}`}>
                           {prod.hasCampaignCode ? formatPercent(prod.margin) : '--'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-brand-700/50 bg-brand-950/40">
+                    <tr className="border-t-2 border-brand-300 bg-ev-light">
                       <td className="py-2.5 px-3 font-bold text-accent text-sm">TOTAL</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-accent">{ap.overview.activeOrders}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-txt-primary">{ap.overview.activeOrders}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{(ap.overview.prepaidRate*100).toFixed(0)}%</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-yellow-400">{(ap.overview.c2pRate*100).toFixed(0)}%</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-yellow-600">{(ap.overview.c2pRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{(ap.overview.codRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aov)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">₹{formatExact(ap.revenue.prepaidRevenueTotal)}</td>
@@ -468,13 +468,13 @@ export default function Dashboard() {
           {/* Upsell Analysis */}
           {ap && ap.upsellAnalysis && Object.keys(ap.upsellAnalysis).length > 0 && !productFilter && (
             <div className="glass-card overflow-hidden">
-              <div className="px-5 py-3 border-b border-brand-800/20">
+              <div className="px-5 py-3 border-b border-brand-300/50">
                 <h3 className="text-sm font-semibold text-accent">Gift Box Upsell Performance</h3>
-                <p className="text-[10px] text-brand-500 mt-0.5">AOV = all orders with this product / order count. "Without Box" subtracts gift box revenue from the same orders. Lift = what the gift box adds per order on average.</p>
+                <p className="text-[10px] text-txt-muted mt-0.5">AOV = all orders with this product / order count. "Without Box" subtracts gift box revenue from the same orders. Lift = what the gift box adds per order on average.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left whitespace-nowrap">
-                  <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                  <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                     <th className="py-2.5 px-3">Product</th>
                     <th className="py-2.5 px-2 text-right">Orders</th>
                     <th className="py-2.5 px-2 text-right">Bought Box</th>
@@ -487,26 +487,26 @@ export default function Dashboard() {
                   </tr></thead>
                   <tbody>
                     {Object.entries(ap.upsellAnalysis).map(([family, u]) => (
-                      <tr key={family} className="border-b border-brand-800/10 hover:bg-brand-900/20 cursor-pointer" onClick={() => setProductFilter(family)}>
+                      <tr key={family} className="border-b border-brand-300/50/50 hover:bg-ev-light cursor-pointer" onClick={() => setProductFilter(family)}>
                         <td className="py-2.5 px-3 text-sm text-accent font-medium">{family}</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-200">{u.totalOrders}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{u.totalOrders}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{u.withUpsellCount}</td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-400' : 'text-cash-red'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-600' : 'text-cash-red'}`}>
                           {(u.attachRate * 100).toFixed(1)}%
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-accent font-bold">₹{formatExact(u.aovCurrent)}</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-brand-400">₹{formatExact(u.aovWithoutBox)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-primary font-bold">₹{formatExact(u.aovCurrent)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(u.aovWithoutBox)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green font-bold">+₹{formatExact(u.aovLiftAmount)}</td>
-                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${u.aovLiftPct > 0 ? 'text-cash-green' : 'text-brand-500'}`}>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${u.aovLiftPct > 0 ? 'text-cash-green' : 'text-txt-muted'}`}>
                           +{(u.aovLiftPct * 100).toFixed(1)}%
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-accent">₹{formatExact(u.totalUpsellRevenue)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-primary">₹{formatExact(u.totalUpsellRevenue)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="px-5 py-2 border-t border-brand-800/10 text-[10px] text-brand-600">Click a product to see order-level breakdown</div>
+              <div className="px-5 py-2 border-t border-brand-300/50/50 text-[10px] text-txt-muted">Click a product to see order-level breakdown</div>
             </div>
           )}
 
@@ -515,9 +515,9 @@ export default function Dashboard() {
             const u = ap.upsellAnalysis[productFilter]
             return (
               <div className="glass-card overflow-hidden">
-                <div className="px-5 py-3 border-b border-brand-800/20">
+                <div className="px-5 py-3 border-b border-brand-300/50">
                   <h3 className="text-sm font-semibold text-accent">Gift Box Upsell: {productFilter}</h3>
-                  <p className="text-[10px] text-brand-500 mt-0.5">
+                  <p className="text-[10px] text-txt-muted mt-0.5">
                     AOV Current = total value of all {u.totalOrders} orders with {productFilter} / {u.totalOrders} = ₹{formatExact(u.aovCurrent)}.{' '}
                     AOV Without Box = (total value - ₹{formatExact(u.totalUpsellRevenue)} gift box revenue) / {u.totalOrders} = ₹{formatExact(u.aovWithoutBox)}.{' '}
                     Gift box adds ₹{formatExact(u.aovLiftAmount)} per order on average.
@@ -525,39 +525,39 @@ export default function Dashboard() {
                 </div>
 
                 {/* Summary cards */}
-                <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-4 border-b border-brand-800/20">
+                <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-4 border-b border-brand-300/50">
                   <div>
-                    <p className="text-[10px] text-brand-500 mb-1">Attach Rate</p>
-                    <p className={`text-xl font-bold font-mono ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-400' : 'text-cash-red'}`}>
+                    <p className="text-[10px] text-txt-muted mb-1">Attach Rate</p>
+                    <p className={`text-xl font-bold font-mono ${u.attachRate >= 0.2 ? 'text-cash-green' : u.attachRate >= 0.1 ? 'text-yellow-600' : 'text-cash-red'}`}>
                       {(u.attachRate * 100).toFixed(1)}%
                     </p>
-                    <p className="text-[10px] text-brand-500 mt-1">{u.withUpsellCount} of {u.totalOrders} orders</p>
+                    <p className="text-[10px] text-txt-muted mt-1">{u.withUpsellCount} of {u.totalOrders} orders</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-brand-500 mb-1">AOV (current)</p>
-                    <p className="text-xl font-bold font-mono text-accent">₹{formatExact(u.aovCurrent)}</p>
+                    <p className="text-[10px] text-txt-muted mb-1">AOV (current)</p>
+                    <p className="text-xl font-bold font-mono text-txt-primary">₹{formatExact(u.aovCurrent)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-brand-500 mb-1">AOV (without box)</p>
-                    <p className="text-xl font-bold font-mono text-brand-300">₹{formatExact(u.aovWithoutBox)}</p>
+                    <p className="text-[10px] text-txt-muted mb-1">AOV (without box)</p>
+                    <p className="text-xl font-bold font-mono text-txt-muted">₹{formatExact(u.aovWithoutBox)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-brand-500 mb-1">Lift per Order</p>
+                    <p className="text-[10px] text-txt-muted mb-1">Lift per Order</p>
                     <p className="text-xl font-bold font-mono text-cash-green">+₹{formatExact(u.aovLiftAmount)}</p>
-                    <p className="text-[10px] text-brand-500 mt-1">+{(u.aovLiftPct * 100).toFixed(1)}%</p>
+                    <p className="text-[10px] text-txt-muted mt-1">+{(u.aovLiftPct * 100).toFixed(1)}%</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-brand-500 mb-1">Total Box Revenue</p>
-                    <p className="text-xl font-bold font-mono text-accent">₹{formatExact(u.totalUpsellRevenue)}</p>
-                    <p className="text-[10px] text-brand-500 mt-1">Avg ₹{formatExact(u.avgUpsellPerBoxOrder)}/box order</p>
+                    <p className="text-[10px] text-txt-muted mb-1">Total Box Revenue</p>
+                    <p className="text-xl font-bold font-mono text-txt-primary">₹{formatExact(u.totalUpsellRevenue)}</p>
+                    <p className="text-[10px] text-txt-muted mt-1">Avg ₹{formatExact(u.avgUpsellPerBoxOrder)}/box order</p>
                   </div>
                 </div>
 
                 {/* Order-level drill-down */}
                 <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                   <table className="w-full text-left">
-                    <thead className="sticky top-0 bg-brand-900/95 backdrop-blur">
-                      <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                    <thead className="sticky top-0 bg-white/95 backdrop-blur">
+                      <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                         <th className="py-2 px-3">Order #</th>
                         <th className="py-2 px-3">Payment</th>
                         <th className="py-2 px-3 text-right">Order Total</th>
@@ -568,26 +568,26 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {u.orders.sort((a, b) => (b.hasUpsell ? 1 : 0) - (a.hasUpsell ? 1 : 0) || b.total - a.total).map(o => (
-                        <tr key={o.id} className={`border-b border-brand-800/5 hover:bg-brand-900/20 ${o.hasUpsell ? '' : 'opacity-60'}`}>
-                          <td className="py-2 px-3 font-mono text-xs text-accent">#{o.id}</td>
+                        <tr key={o.id} className={`border-b border-brand-300/50/5 hover:bg-ev-light ${o.hasUpsell ? '' : 'opacity-60'}`}>
+                          <td className="py-2 px-3 font-mono text-xs text-txt-primary">#{o.id}</td>
                           <td className="py-2 px-3">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${o.paymentType === 'prepaid' ? 'bg-green-900/30 text-cash-green' : o.paymentType === 'c2p' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-brand-800/30 text-brand-300'}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${o.paymentType === 'prepaid' ? 'bg-green-50 text-cash-green' : o.paymentType === 'c2p' ? 'bg-yellow-900/30 text-yellow-600' : 'bg-ev-light text-txt-muted'}`}>
                               {o.paymentType.toUpperCase()}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(o.total)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(o.total)}</td>
                           <td className="py-2 px-3">
                             {o.hasUpsell
-                              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-900/20 text-cash-green font-medium">Yes</span>
-                              : <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-800/30 text-brand-500">No</span>
+                              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-cash-green font-medium">Yes</span>
+                              : <span className="text-[10px] px-1.5 py-0.5 rounded bg-ev-light text-txt-muted">No</span>
                             }
                           </td>
                           <td className="py-2 px-3 text-right font-mono text-xs text-cash-green">
                             {o.upsellRevenue > 0 ? `₹${formatExact(o.upsellRevenue)}` : '--'}
                           </td>
-                          <td className="py-2 px-3 text-xs text-brand-400">
+                          <td className="py-2 px-3 text-xs text-txt-muted">
                             {o.items.map((li, i) => (
-                              <span key={i} className={`${li.title.toLowerCase().includes('gift') ? 'text-cash-green' : 'text-brand-300'}`}>
+                              <span key={i} className={`${li.title.toLowerCase().includes('gift') ? 'text-cash-green' : 'text-txt-muted'}`}>
                                 {i > 0 ? ' + ' : ''}{li.title.split(' - ')[0]}{li.qty > 1 ? ` x${li.qty}` : ''}
                               </span>
                             ))}
@@ -597,7 +597,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
-                <div className="px-5 py-2 border-t border-brand-800/10 text-[10px] text-brand-600">
+                <div className="px-5 py-2 border-t border-brand-300/50/50 text-[10px] text-txt-muted">
                   {u.totalOrders} orders | {u.withUpsellCount} with gift box (shown first) | {u.withoutUpsellCount} without (faded)
                 </div>
               </div>
@@ -608,19 +608,19 @@ export default function Dashboard() {
           {productFilter && p.products.length > 0 && (
             <>
               {!p.products[0].hasCampaignCode && rawData?.metaCampaigns?.length > 0 && (
-                <div className="glass-card p-3 bg-yellow-900/10 border-yellow-500/15 text-sm text-yellow-400 flex items-center gap-2">
+                <div className="glass-card p-3 bg-yellow-50 border-yellow-200 text-sm text-yellow-600 flex items-center gap-2">
                   <AlertTriangle size={14} /> Campaign code missing for {productFilter}. Add it in Product Database.
                 </div>
               )}
               <div className="glass-card overflow-hidden">
-                <button onClick={() => setShowVariants(!showVariants)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-brand-900/20 border-b border-brand-800/20">
+                <button onClick={() => setShowVariants(!showVariants)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-ev-light border-b border-brand-300/50">
                   <h3 className="text-sm font-semibold text-accent">Variants: {productFilter} ({p.products[0]?.variants.length || 0})</h3>
-                  <ChevronDown size={16} className={`text-brand-400 transition-transform ${showVariants ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={16} className={`text-txt-muted transition-transform ${showVariants ? 'rotate-180' : ''}`} />
                 </button>
                 {showVariants && (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                      <thead><tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                      <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                         <th className="py-2.5 px-4">Variant</th><th className="py-2.5 px-3 text-right">Vendor ₹</th>
                         <th className="py-2.5 px-3 text-right">Prepaid</th><th className="py-2.5 px-3 text-right">C2P</th>
                         <th className="py-2.5 px-3 text-right">COD</th><th className="py-2.5 px-3 text-right">Total</th>
@@ -628,15 +628,15 @@ export default function Dashboard() {
                       </tr></thead>
                       <tbody>
                         {p.products[0]?.variants.map(v => (
-                          <tr key={v.name} className="border-b border-brand-800/10 hover:bg-brand-900/20">
-                            <td className="py-2.5 px-4 text-sm text-brand-200">{v.name}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-400">₹{v.vendorPrice}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">{v.prepaidQty}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-yellow-400">{v.c2pQty}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">{v.codQty}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-accent">{v.totalQty}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(v.revenue)}</td>
-                            <td className="py-2.5 px-3 text-right font-mono text-xs text-brand-300">₹{formatExact(v.vendorCost)}</td>
+                          <tr key={v.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
+                            <td className="py-2.5 px-4 text-sm text-txt-secondary">{v.name}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-txt-muted">₹{v.vendorPrice}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-txt-secondary">{v.prepaidQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-yellow-600">{v.c2pQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-txt-muted">{v.codQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-txt-primary">{v.totalQty}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(v.revenue)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(v.vendorCost)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -645,13 +645,13 @@ export default function Dashboard() {
                 )}
               </div>
               <div className="glass-card overflow-hidden">
-                <div className="px-5 py-3 border-b border-brand-800/20">
+                <div className="px-5 py-3 border-b border-brand-300/50">
                   <h3 className="text-sm font-semibold text-accent">Orders ({p.orderDetails.length})</h3>
                 </div>
                 <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                   <table className="w-full text-left">
-                    <thead className="sticky top-0 bg-brand-900/95 backdrop-blur">
-                      <tr className="border-b border-brand-800/30 text-[10px] text-brand-400 uppercase tracking-wider">
+                    <thead className="sticky top-0 bg-white/95 backdrop-blur">
+                      <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                         <th className="py-2 px-3">Order #</th><th className="py-2 px-3">Payment</th>
                         <th className="py-2 px-3 text-right">Total</th><th className="py-2 px-3">Items</th>
                         <th className="py-2 px-3 text-right">COGS</th>
@@ -659,12 +659,12 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {p.orderDetails.map(o => (
-                        <tr key={o.id} className="border-b border-brand-800/5 hover:bg-brand-900/20">
-                          <td className="py-2 px-3 font-mono text-xs text-accent">#{o.id}</td>
-                          <td className="py-2 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${o.paymentType==='prepaid'?'bg-green-900/30 text-cash-green':o.paymentType==='c2p'?'bg-yellow-900/30 text-yellow-400':'bg-brand-800/30 text-brand-300'}`}>{o.paymentType.toUpperCase()}</span></td>
-                          <td className="py-2 px-3 text-right font-mono text-xs text-brand-200">₹{formatExact(o.totalPrice)}</td>
-                          <td className="py-2 px-3 text-xs text-brand-300">{o.lineItems.map((li,i) => <div key={i}>{li.title.split(' - ')[0]} x{li.quantity}</div>)}</td>
-                          <td className="py-2 px-3 text-right font-mono text-xs text-brand-400">₹{formatExact(o.cogs)}</td>
+                        <tr key={o.id} className="border-b border-brand-300/50/5 hover:bg-ev-light">
+                          <td className="py-2 px-3 font-mono text-xs text-txt-primary">#{o.id}</td>
+                          <td className="py-2 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${o.paymentType==='prepaid'?'bg-green-50 text-cash-green':o.paymentType==='c2p'?'bg-yellow-900/30 text-yellow-600':'bg-ev-light text-txt-muted'}`}>{o.paymentType.toUpperCase()}</span></td>
+                          <td className="py-2 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(o.totalPrice)}</td>
+                          <td className="py-2 px-3 text-xs text-txt-muted">{o.lineItems.map((li,i) => <div key={i}>{li.title.split(' - ')[0]} x{li.quantity}</div>)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(o.cogs)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -676,12 +676,12 @@ export default function Dashboard() {
         </>
       )}
 
-      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-brand-500 mx-auto mb-3 animate-spin" /><p className="text-sm text-brand-400">Loading cached data...</p></div>}
+      {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-txt-muted mx-auto mb-3 animate-spin" /><p className="text-sm text-txt-muted">Loading cached data...</p></div>}
 
       {ready && !pnl && !loading && <div className="glass-card p-12 text-center">
-        <BarChart size={48} className="text-brand-600 mx-auto mb-4" />
+        <BarChart size={48} className="text-txt-muted mx-auto mb-4" />
         <h3 className="text-lg font-semibold text-accent mb-2">No data yet</h3>
-        <p className="text-sm text-brand-400">Select a date range and hit Fetch Data.</p>
+        <p className="text-sm text-txt-muted">Select a date range and hit Fetch Data.</p>
       </div>}
     </div>
   )
