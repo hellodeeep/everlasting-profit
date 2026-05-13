@@ -320,7 +320,7 @@ export default function MetaAds() {
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-accent">{p.name}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{p.code}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-txt-muted">{p.code}</span>
                         </div>
                       </td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{p.campaigns}</td>
@@ -402,7 +402,7 @@ export default function MetaAds() {
               <p className="text-[10px] text-txt-muted mb-3">These ads spent ₹100+ but got zero purchases. Consider pausing them.</p>
               <div className="space-y-1.5">
                 {wasters.slice(0, 10).map((c, i) => (
-                  <div key={c.adId || c.campaignId || i} className="flex items-center justify-between py-1.5 px-2 rounded bg-brand-800/20">
+                  <div key={c.adId || c.campaignId || i} className="flex items-center justify-between py-1.5 px-2 rounded bg-ev-light">
                     <span className="text-xs text-txt-muted truncate flex-1">{c.adName || c.campaignName}</span>
                     <div className="flex gap-4 ml-3 text-[10px] font-mono text-txt-muted shrink-0">
                       <span>₹{formatExact(c.spend)}</span>
@@ -437,7 +437,7 @@ export default function MetaAds() {
             </button>
           ))}
           <label className="ml-auto flex items-center gap-2 text-xs text-txt-muted cursor-pointer">
-            <input type="checkbox" checked={showZeroSpend} onChange={e => setShowZeroSpend(e.target.checked)} className="rounded bg-brand-800 border-brand-600" />
+            <input type="checkbox" checked={showZeroSpend} onChange={e => setShowZeroSpend(e.target.checked)} className="rounded bg-white border-brand-300" />
             Show zero spend
           </label>
         </div>

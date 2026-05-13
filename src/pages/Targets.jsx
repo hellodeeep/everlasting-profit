@@ -8,7 +8,7 @@ import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 
 function Bar({ pct, color = 'bg-brand-500', h = 'h-2.5' }) {
   return (
-    <div className={`w-full ${h} rounded-full bg-brand-800/40 overflow-hidden`}>
+    <div className={`w-full ${h} rounded-full bg-brand-200 overflow-hidden`}>
       <div className={`${h} rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }} />
     </div>
   )
@@ -71,7 +71,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
   const availableProducts = dbProducts.filter(p => !existingNames.has(p.name) && p.name)
 
   return (
-    <div className="glass-card p-5 border-l-4 border-l-yellow-500">
+    <div className="glass-card p-5 border-l-4 border-l-accent">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-bold text-accent flex items-center gap-2"><Settings size={16} /> Edit Monthly Targets</h3>
         <div className="flex gap-2">
@@ -94,7 +94,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
           const ref = referenceData[p.name]
 
           return (
-            <div key={idx} className="p-4 rounded-xl bg-brand-800/40 border border-brand-300/50">
+            <div key={idx} className="p-4 rounded-xl bg-white border border-brand-300/50 shadow-card">
               {/* Header row */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -102,7 +102,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <input className="input-field !py-1 !text-sm !w-16 !text-center font-mono" value={p.code} onChange={e => updateProduct(idx, 'code', e.target.value.toUpperCase())} placeholder="CODE" />
                 </div>
                 <div className="flex items-center gap-2">
-                  {ref && <button onClick={() => useActual(idx)} className="text-[10px] px-2 py-1 rounded bg-brand-800/40 text-yellow-600 hover:bg-ev-light">Use actual CAC/AOV</button>}
+                  {ref && <button onClick={() => useActual(idx)} className="text-[10px] px-2 py-1 rounded bg-ev-light text-accent hover:bg-brand-200">Use actual CAC/AOV</button>}
                   <button onClick={() => removeProduct(idx)} className="p-1.5 rounded text-txt-muted hover:text-cash-red hover:bg-red-50"><Trash2 size={14} /></button>
                 </div>
               </div>
@@ -148,7 +148,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                 </div>
 
                 {/* Auto-calculated Profit */}
-                <div className="bg-brand-800/20 rounded-lg p-2">
+                <div className="bg-ev-light rounded-lg p-3">
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Est. Monthly Profit</label>
                   <p className={`text-lg font-bold font-mono ${est.profitMonthly > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(est.profitMonthly)}</p>
                   <p className="text-[9px] text-txt-muted mt-0.5">
@@ -174,7 +174,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
           }
         }, { orders: 0, revenue: 0, spend: 0, profit: 0 })
         return (
-          <div className="mt-4 p-3 rounded-lg bg-brand-800/20 flex flex-wrap gap-6">
+          <div className="mt-4 p-3 rounded-lg bg-ev-light border border-brand-300/50 flex flex-wrap gap-6">
             <div><p className="text-[9px] text-txt-muted uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-txt-primary">{formatExact(totals.orders)}/mo ({Math.round(totals.orders/daysInMonth)}/day)</p></div>
             <div><p className="text-[9px] text-txt-muted uppercase">Total Revenue</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(totals.revenue)}</p></div>
             <div><p className="text-[9px] text-txt-muted uppercase">Total Meta Spend</p><p className="text-sm font-bold font-mono text-txt-muted">₹{formatExact(totals.spend)} (pre-GST)</p></div>
@@ -187,7 +187,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {availableProducts.map(dp => (
           <button key={dp.name} onClick={() => addFromDB(dp)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-brand-800/40 text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-700/20">
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-ev-light text-txt-secondary hover:text-accent hover:border-accent border border-brand-300/50">
             <Plus size={10} /> {dp.name} {dp.campaignCode && <span className="text-[9px] font-mono text-txt-muted">{dp.campaignCode}</span>}
           </button>
         ))}
@@ -452,19 +452,19 @@ export default function Targets() {
             return { ...t, aO, tO, pct, onTrack, needOrders, needSpend, avgDaily, avgSpend, steps }
           })
           return (
-            <div className="glass-card p-5 border-l-4 border-l-brand-500">
+            <div className="glass-card p-5 border-l-4 border-l-accent">
               <h3 className="text-base font-bold text-accent mb-1">Tomorrow's Game Plan</h3>
               <p className="text-xs text-txt-muted mb-4">
                 {overallOnTrack ? `You're on track overall (${aOrd}/${tOrdMTD} orders by Day ${daysElapsed}). Stay consistent.` : `You're behind by ${formatExact(tOrdMTD - aOrd)} orders. Here's what each product needs:`}
               </p>
               <div className="space-y-4">
                 {productActions.map(pa => (
-                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.onTrack ? '✓' : '✗'}</span>
                         <h4 className="text-sm font-semibold text-accent">{pa.name}</h4>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{pa.code}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{pa.code}</span>
                       </div>
                       <span className={`text-xs font-mono font-bold ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.aO}/{pa.tO} ({(pa.pct*100).toFixed(0)}%)</span>
                     </div>
@@ -526,7 +526,7 @@ export default function Targets() {
                   const profitOnTrack = avgProfit >= t.profitDaily * 0.9
                   return (
                     <tr key={t.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
-                      <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-brand-800/40 text-txt-muted">{t.code}</span></div></td>
+                      <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{t.code}</span></div></td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(t.ordersMonthly)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{t.ordersDaily}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ordOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>{Math.round(avgOrd)}</td>

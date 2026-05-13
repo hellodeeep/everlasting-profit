@@ -79,7 +79,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Important Note */}
-      <div className="glass-card p-4 border-brand-500/20 bg-brand-900/20">
+      <div className="glass-card p-4 border-brand-500/20 bg-ev-light">
         <div className="flex items-start gap-3">
           <Key size={18} className="text-brand-400 mt-0.5" />
           <div className="text-sm text-brand-300 space-y-2">
@@ -87,7 +87,7 @@ export default function SettingsPage() {
               <strong className="text-accent">Important:</strong> API keys entered here are saved locally in your browser
               (or Supabase if configured). For production, set these as environment variables in Vercel:
             </p>
-            <code className="block text-xs font-mono text-brand-400 bg-brand-950/50 p-3 rounded-lg">
+            <code className="block text-xs font-mono text-brand-400 bg-ev-light p-3 rounded-lg">
               SHOPIFY_STORE=minimal-mate<br/>
               SHOPIFY_CLIENT_ID=from Dev Dashboard<br/>
               SHOPIFY_CLIENT_SECRET=from Dev Dashboard<br/>
@@ -109,7 +109,7 @@ export default function SettingsPage() {
         description="Connect to your Shopify store via OAuth for order data"
       >
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-brand-950/50 border border-brand-800/20">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-ev-light border border-brand-300/50">
             <div>
               <p className="text-sm font-medium text-accent">Shopify Connection</p>
               <p className="text-xs text-brand-400 mt-1">

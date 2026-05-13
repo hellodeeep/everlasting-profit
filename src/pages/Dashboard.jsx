@@ -261,7 +261,7 @@ export default function Dashboard() {
 
       {/* Not cached notice */}
       {!isCached && dateRange.since && !loading && (
-        <div className="glass-card p-3 bg-brand-800/40 text-sm text-txt-muted flex items-center gap-2">
+        <div className="glass-card p-3 bg-ev-light text-sm text-txt-muted flex items-center gap-2">
           <Clock size={14} /> No data for {dateLabel}. Click {isCached ? 'Refresh' : 'Fetch Data'} to load.
         </div>
       )}
