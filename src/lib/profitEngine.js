@@ -276,6 +276,9 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
 
     // AOV including upsells (full order total / unique orders)
     const aovWithUpsells = orderCount > 0 ? p.fullOrderRevenue / orderCount : 0
+    const aovPrepaid = prepaidOrderCount > 0 ? p.fullPrepaidRevenue / prepaidOrderCount : 0
+    const aovC2p = c2pOrderCount > 0 ? p.fullC2pRevenue / c2pOrderCount : 0
+    const aovCod = codOrderCount > 0 ? p.fullCodRevenue / codOrderCount : 0
 
     // CAC with GST (Meta spend including GST / unique orders)
     const cacWithGST = orderCount > 0 ? pAds / orderCount : 0
@@ -298,7 +301,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       margin: pExpRev > 0 ? pProfit / pExpRev : 0,
       // New metrics
       prepaidPct, c2pPct, codPct,
-      aovWithUpsells, cacWithGST,
+      aovWithUpsells, aovPrepaid, aovC2p, aovCod, cacWithGST,
       prepaidRevenueTotal, codRevenueExpected, prepaidToAdSpend,
       fullOrderRevenue: p.fullOrderRevenue,
       variants: Object.values(p.variants).sort((a, b) => b.revenue - a.revenue) }
@@ -331,6 +334,9 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       cacWithGST: activeOrders.length > 0 ? metaSpendForView / activeOrders.length : 0,
       cacPreGST: activeOrders.length > 0 ? (metaSpendForView / 1.18) / activeOrders.length : 0,
       aov: activeOrders.length > 0 ? fullOrderRevenue / activeOrders.length : 0,
+      aovPrepaid: prepaidOrders.length > 0 ? prepaidOrders.reduce((s, o) => s + o.totalPrice, 0) / prepaidOrders.length : 0,
+      aovC2p: c2pOrders.length > 0 ? c2pOrders.reduce((s, o) => s + o.totalPrice, 0) / c2pOrders.length : 0,
+      aovCod: codOrders.length > 0 ? codOrders.reduce((s, o) => s + o.totalPrice, 0) / codOrders.length : 0,
       adSpendRatio: expectedRevenue > 0 ? metaSpendForView / expectedRevenue : 0,
       prepaidToAdSpend: metaSpendForView > 0 ? (prepaidRevenue + c2pUpfront) / metaSpendForView : 0 },
     products, orderDetails, allFamilies,

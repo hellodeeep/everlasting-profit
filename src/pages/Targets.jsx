@@ -502,11 +502,13 @@ export default function Targets() {
                   <th className="py-2.5 px-3" rowSpan={2}>Product</th>
                   <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={5}>Orders / Day</th>
                   <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Meta Spend / Day (pre-GST)</th>
+                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={3}>AOV (full order)</th>
                   <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Profit / Day</th>
                 </tr>
                 <tr className="border-b border-brand-300/50 text-[9px] text-txt-muted uppercase">
                   <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th><th className="py-1.5 px-2 text-right">Need*</th>
                   <th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">CAC</th><th className="py-1.5 px-2 text-right">Need*</th>
+                  <th className="py-1.5 px-2 text-right">Prepaid</th><th className="py-1.5 px-2 text-right">C2P</th><th className="py-1.5 px-2 text-right">COD</th>
                   <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th>
                 </tr>
               </thead>
@@ -524,6 +526,9 @@ export default function Targets() {
                   const needSpd = needOrd * actualCAC
                   const ordOnTrack = avgOrd >= t.ordersDaily * 0.9
                   const profitOnTrack = avgProfit >= t.profitDaily * 0.9
+                  const aPrepaidAOV = actual?.aovPrepaid || 0
+                  const aC2pAOV = actual?.aovC2p || 0
+                  const aCodAOV = actual?.aovCod || 0
                   return (
                     <tr key={t.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
                       <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{t.code}</span></div></td>
@@ -536,6 +541,9 @@ export default function Targets() {
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${avgSpd > 0 ? 'text-txt-secondary' : 'text-txt-muted'}`}>₹{formatExact(Math.round(avgSpd))}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs ${actualCAC <= t.cac ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(actualCAC))}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needSpd > t.spendDaily * 1.3 ? 'text-cash-red' : needSpd > t.spendDaily ? 'text-yellow-600' : 'text-cash-green'}`}>₹{formatExact(Math.round(needSpd))}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aPrepaidAOV >= t.aov * 0.9 ? 'text-cash-green' : aPrepaidAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aPrepaidAOV > 0 ? `₹${formatExact(aPrepaidAOV)}` : '--'}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aC2pAOV >= t.aov * 0.9 ? 'text-cash-green' : aC2pAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aC2pAOV > 0 ? `₹${formatExact(aC2pAOV)}` : '--'}</td>
+                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aCodAOV >= t.aov * 0.9 ? 'text-cash-green' : aCodAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aCodAOV > 0 ? `₹${formatExact(aCodAOV)}` : '--'}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitMonthly)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitDaily)}</td>
                       <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${profitOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(avgProfit))}</td>

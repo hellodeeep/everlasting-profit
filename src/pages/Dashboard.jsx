@@ -327,12 +327,14 @@ export default function Dashboard() {
       {p && (
         <>
           {/* Row 1: Orders & Payment Split */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Stat label="Total Orders" value={p.overview.activeOrders} sub={`Cancelled: ${p.overview.cancelledOrders}`} />
             <Stat label="Prepaid %" value={formatPercent(p.overview.prepaidRate)} sub={`${p.overview.prepaidOrders} orders`} color="text-cash-green" />
             <Stat label="C2P %" value={formatPercent(p.overview.c2pRate)} sub={`${p.overview.c2pOrders} orders (₹150 ea)`} color="text-yellow-600" />
             <Stat label="COD %" value={formatPercent(p.overview.codRate)} sub={`${p.overview.codOrders} orders (30% del)`} color="text-txt-muted" />
-            <Stat label="AOV (incl. upsells)" value={`₹${formatExact(p.metrics.aov)}`} sub="Full order value / orders" />
+            <Stat label="Prepaid AOV" value={`₹${formatExact(p.metrics.aovPrepaid)}`} sub={`${p.overview.prepaidOrders} orders`} />
+            <Stat label="C2P AOV" value={`₹${formatExact(p.metrics.aovC2p)}`} sub={`${p.overview.c2pOrders} orders`} />
+            <Stat label="COD AOV" value={`₹${formatExact(p.metrics.aovCod)}`} sub={`${p.overview.codOrders} orders`} />
             <Stat label="CAC (incl. GST)" value={`₹${formatExact(p.metrics.cacWithGST)}`}
               sub={`Pre-GST: ₹${formatExact(p.metrics.cacPreGST)}`}
               color={p.metrics.cacPreGST > 0 && p.metrics.cacPreGST <= 500 ? 'text-cash-green' : p.metrics.cacPreGST > 500 ? 'text-cash-red' : 'text-txt-muted'} />
@@ -403,7 +405,9 @@ export default function Dashboard() {
                       <th className="py-2.5 px-2 text-right">Prepaid%</th>
                       <th className="py-2.5 px-2 text-right">C2P%</th>
                       <th className="py-2.5 px-2 text-right">COD%</th>
-                      <th className="py-2.5 px-2 text-right">AOV</th>
+                      <th className="py-2.5 px-2 text-right">P.AOV</th>
+                      <th className="py-2.5 px-2 text-right">C2P.AOV</th>
+                      <th className="py-2.5 px-2 text-right">COD.AOV</th>
                       <th className="py-2.5 px-2 text-right">Prepaid Rev</th>
                       <th className="py-2.5 px-2 text-right">COD Rev</th>
                       <th className="py-2.5 px-2 text-right">Meta ₹</th>
@@ -428,7 +432,9 @@ export default function Dashboard() {
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{(prod.prepaidPct*100).toFixed(0)}%</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-yellow-600">{(prod.c2pPct*100).toFixed(0)}%</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{(prod.codPct*100).toFixed(0)}%</td>
-                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">₹{formatExact(prod.aovWithUpsells)}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovPrepaid > 0 ? `₹${formatExact(prod.aovPrepaid)}` : '--'}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovC2p > 0 ? `₹${formatExact(prod.aovC2p)}` : '--'}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovCod > 0 ? `₹${formatExact(prod.aovCod)}` : '--'}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">₹{formatExact(prod.prepaidRevenueTotal)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(prod.codRevenueExpected)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">
@@ -456,7 +462,9 @@ export default function Dashboard() {
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{(ap.overview.prepaidRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-yellow-600">{(ap.overview.c2pRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{(ap.overview.codRate*100).toFixed(0)}%</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aov)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovPrepaid)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovC2p)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovCod)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">₹{formatExact(ap.revenue.prepaidRevenueTotal)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.revenue.codRevenueExpected)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.expenses.metaAds)}</td>
