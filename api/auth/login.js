@@ -8,10 +8,11 @@ export default function handler(req, res) {
   const { username, password } = req.body || {};
   const validUser = process.env.APP_USERNAME || 'deep';
   const validPass = process.env.APP_PASSWORD || 'everlasting2026';
+  const secret = process.env.APP_SECRET || 'ev-profit-secret';
 
   if (username === validUser && password === validPass) {
-    const crypto = require('crypto');
-    const token = crypto.createHash('sha256').update(`${validUser}:${validPass}:${process.env.APP_SECRET || 'ev-profit-secret'}`).digest('hex');
+    // Simple token: base64 of username + secret
+    const token = Buffer.from(`${validUser}:${secret}`).toString('base64');
     return res.status(200).json({ success: true, token });
   }
 

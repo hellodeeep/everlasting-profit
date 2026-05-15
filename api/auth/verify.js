@@ -5,10 +5,9 @@ export default function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { token } = req.body || {};
-  const crypto = require('crypto');
   const validUser = process.env.APP_USERNAME || 'deep';
-  const validPass = process.env.APP_PASSWORD || 'everlasting2026';
-  const validToken = crypto.createHash('sha256').update(`${validUser}:${validPass}:${process.env.APP_SECRET || 'ev-profit-secret'}`).digest('hex');
+  const secret = process.env.APP_SECRET || 'ev-profit-secret';
+  const validToken = Buffer.from(`${validUser}:${secret}`).toString('base64');
 
   if (token === validToken) return res.status(200).json({ valid: true });
   return res.status(401).json({ valid: false });

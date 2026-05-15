@@ -13,8 +13,12 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const ok = await login(username, password)
-    if (!ok) setError('Invalid username or password')
+    try {
+      const result = await login(username, password)
+      if (!result.ok) setError(result.error || 'Invalid username or password')
+    } catch {
+      setError('Something went wrong. Try again.')
+    }
     setLoading(false)
   }
 

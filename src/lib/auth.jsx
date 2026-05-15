@@ -24,19 +24,23 @@ export function AuthProvider({ children }) {
   }, [token])
 
   const login = async (username, password) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    })
-    const data = await res.json()
-    if (data.success && data.token) {
-      localStorage.setItem(TOKEN_KEY, data.token)
-      setToken(data.token)
-      setVerified(true)
-      return true
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      if (data.success && data.token) {
+        localStorage.setItem(TOKEN_KEY, data.token)
+        setToken(data.token)
+        setVerified(true)
+        return { ok: true }
+      }
+      return { ok: false, error: data.error || 'Invalid credentials' }
+    } catch (e) {
+      return { ok: false, error: 'Connection failed. Try again.' }
     }
-    return false
   }
 
   const logout = () => {
