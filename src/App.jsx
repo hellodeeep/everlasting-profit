@@ -1,12 +1,14 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { BarChart, Database, Settings, Zap, Target, Activity } from 'lucide-react'
+import { BarChart, Database, Settings, Zap, Target, Activity, LogOut } from 'lucide-react'
 import { DataProvider } from './lib/dataStore'
+import { AuthProvider, useAuth } from './lib/auth'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import Targets from './pages/Targets'
 import MetaAds from './pages/MetaAds'
 import SettingsPage from './pages/Settings'
+import Login from './pages/Login'
 
 const NAV_ITEMS = [
   { to: '/', icon: BarChart, label: 'Dashboard', end: true },
@@ -33,6 +35,7 @@ function MobileNav() {
 }
 
 function DesktopSidebar() {
+  const { logout } = useAuth()
   const linkClass = ({ isActive }) =>
     `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
       isActive
@@ -58,6 +61,11 @@ function DesktopSidebar() {
           </NavLink>
         ))}
       </nav>
+      <div className="px-3 pb-2">
+        <button onClick={logout} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-brand-400 hover:text-white hover:bg-white/10 w-full transition-all">
+          <LogOut size={18} /> Logout
+        </button>
+      </div>
       <div className="px-5 py-4 border-t border-white/10">
         <p className="text-[10px] text-brand-500">9 Figures Club Pvt Ltd</p>
       </div>
@@ -85,7 +93,24 @@ function MobileHeader() {
   )
 }
 
-export default function App() {
+function AuthenticatedApp() {
+  const { isLoggedIn, checking } = useAuth()
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-page">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-ev-primary to-ev-glow flex items-center justify-center animate-pulse">
+            <Zap size={16} className="text-ev-secondary" />
+          </div>
+          <span className="text-txt-muted text-sm">Loading...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isLoggedIn) return <Login />
+
   return (
     <DataProvider>
       <BrowserRouter>
@@ -103,5 +128,13 @@ export default function App() {
         </main>
       </BrowserRouter>
     </DataProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   )
 }

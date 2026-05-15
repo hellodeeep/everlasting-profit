@@ -20,7 +20,7 @@ export default {
         page: '#f8f6f2',
         card: '#ffffff',
         accent: '#372348',
-        ev: { primary: '#372348', secondary: '#e9d5f6', light: '#f3ebf9' },
+        ev: { primary: '#372348', secondary: '#e9d5f6', light: '#f3ebf9', glow: '#4a3060' },
         cash: { green: '#16a34a', red: '#dc2626' },
         txt: { primary: '#1a1328', secondary: '#5a4875', muted: '#8878a0' },
       },
