@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X } from 'lucide-react'
-import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
+import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY, targetsKeyForMonth } from '../lib/targets'
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
@@ -227,18 +227,46 @@ export default function Targets() {
   const [showDaily, setShowDaily] = useState(false)
   const [editing, setEditing] = useState(false)
 
-  // Load targets from cache or use defaults
+  // Which month's targets we're working with (default: current month)
+  const [activeMonth, setActiveMonth] = useState(getCurrentMonth())
+
+  // Load targets for the active month, with fallback chain:
+  // 1. this month's saved targets
+  // 2. most recent prior month's saved targets (as a template)
+  // 3. legacy single-slot targets (one-time migration)
+  // 4. defaults
   const rawTargets = useMemo(() => {
-    const saved = getCacheByKey(TARGETS_CACHE_KEY)
-    return saved?.data || DEFAULT_RAW_TARGETS
-  }, [getCacheByKey, ready])
+    // 1. exact month
+    const exact = getCacheByKey(targetsKeyForMonth(activeMonth))
+    if (exact?.data) return { ...exact.data, month: activeMonth }
+
+    // 2. most recent prior month
+    let best = null, bestMonth = ''
+    for (const key of Object.keys(cache)) {
+      if (key.startsWith('targets_config_')) {
+        const mo = key.replace('targets_config_', '')
+        if (mo < activeMonth && mo > bestMonth) { bestMonth = mo; best = cache[key] }
+      }
+    }
+    if (best?.data) return { ...best.data, month: activeMonth }
+
+    // 3. legacy single slot
+    const legacy = getCacheByKey(TARGETS_CACHE_KEY)
+    if (legacy?.data) return { ...legacy.data, month: activeMonth }
+
+    // 4. defaults
+    return { ...DEFAULT_RAW_TARGETS, month: activeMonth }
+  }, [getCacheByKey, cache, activeMonth, ready])
 
   const targets = useMemo(() => buildTargets(rawTargets), [rawTargets])
 
   const saveTargets = useCallback((newRaw) => {
-    setCacheByKey(TARGETS_CACHE_KEY, { data: newRaw })
+    // Save under the month chosen inside the editor form
+    const mo = newRaw.month || activeMonth
+    setCacheByKey(targetsKeyForMonth(mo), { data: newRaw })
+    setActiveMonth(mo)
     setEditing(false)
-  }, [setCacheByKey])
+  }, [setCacheByKey, activeMonth])
 
   const dbProducts = useMemo(() => getProducts(), [])
 

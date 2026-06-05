@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, BarChart, EyeOff, Eye } from 'lucide-react'
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
-import { getDaysInMonth, getDaysElapsed, buildTargets, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
+import { getDaysInMonth, getDaysElapsed, buildTargets, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY, targetsKeyForMonth } from '../lib/targets'
 
 const GST = 1.18
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -54,10 +54,23 @@ export default function Summary() {
   const isClosed = daysElapsed >= daysTotal
   const proRate = isClosed ? 1 : (daysElapsed > 0 ? daysElapsed / daysTotal : 1)
 
-  const rawTargets = useMemo(() => {
-    const saved = getCacheByKey(TARGETS_CACHE_KEY)
-    return saved?.data || DEFAULT_RAW_TARGETS
-  }, [getCacheByKey, ready])
+  const { rawTargets, targetsExplicit } = useMemo(() => {
+    const exact = getCacheByKey(targetsKeyForMonth(monthStr))
+    if (exact?.data) return { rawTargets: { ...exact.data, month: monthStr }, targetsExplicit: true }
+    let best = null, bestMonth = ''
+    for (const key of Object.keys(cache)) {
+      if (key.startsWith('targets_config_')) {
+        const mo = key.replace('targets_config_', '')
+        if (mo < monthStr && mo > bestMonth) { bestMonth = mo; best = cache[key] }
+      }
+    }
+    if (best?.data) return { rawTargets: { ...best.data, month: monthStr }, targetsExplicit: false }
+    const legacy = getCacheByKey(TARGETS_CACHE_KEY)
+    return {
+      rawTargets: legacy?.data ? { ...legacy.data, month: monthStr } : { ...DEFAULT_RAW_TARGETS, month: monthStr },
+      targetsExplicit: false,
+    }
+  }, [getCacheByKey, cache, monthStr, ready])
   const targets = useMemo(() => buildTargets({ ...rawTargets, month: monthStr }), [rawTargets, monthStr])
 
   const { mtdPnl, hasData } = useMemo(() => {
@@ -229,7 +242,7 @@ export default function Summary() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-accent">Monthly Summary</h2>
-          <p className="text-sm text-txt-muted mt-0.5">Target vs reality · {isClosed ? 'final' : `day ${daysElapsed} of ${daysTotal}, targets pro-rated`}</p>
+          <p className="text-sm text-txt-muted mt-0.5">Target vs reality · {isClosed ? 'final' : `day ${daysElapsed} of ${daysTotal}, targets pro-rated`}{!targetsExplicit && hasData ? ' · targets inherited (none set for this month)' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 glass-card px-1.5 py-1">

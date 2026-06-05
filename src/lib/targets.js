@@ -102,3 +102,8 @@ export const DEFAULT_RAW_TARGETS = {
 }
 
 export const TARGETS_CACHE_KEY = 'targets_config'
+
+// Per-month targets key so each month keeps its own targets (history preserved)
+export function targetsKeyForMonth(month) {
+  return `targets_config_${month}`
+}
