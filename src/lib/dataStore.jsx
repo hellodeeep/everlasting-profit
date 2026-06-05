@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { getAllCache, setCacheEntry } from './supabase'
 
 const DB_NAME = 'everlasting_profit'
 const STORE_NAME = 'cache'
 const DB_VERSION = 1
 
-// ---- IndexedDB helpers ----
+// ---- IndexedDB helpers (local fast-cache layer) ----
 let dbInstance = null
 
 function openDB() {
@@ -49,13 +50,38 @@ const DataContext = createContext(null)
 export function DataProvider({ children }) {
   const [cache, setCache] = useState({})
   const [ready, setReady] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
-  // Load all cached data from IndexedDB on mount
+  // On mount: show local IndexedDB cache immediately (fast), then merge in the
+  // shared Supabase cache so every browser/device sees the same fetched data.
   useEffect(() => {
-    idbGetAll().then(data => {
-      setCache(data)
+    let cancelled = false
+
+    // 1. Local cache first for instant paint
+    idbGetAll().then(local => {
+      if (!cancelled && local && Object.keys(local).length) {
+        setCache(prev => ({ ...local, ...prev }))
+      }
+    }).catch(() => {})
+
+    // 2. Shared cache from Supabase (source of truth)
+    setSyncing(true)
+    getAllCache().then(remote => {
+      if (cancelled) return
+      if (remote && Object.keys(remote).length) {
+        // Remote wins on conflict, then mirror into IndexedDB for offline speed
+        setCache(prev => ({ ...prev, ...remote }))
+        Object.entries(remote).forEach(([k, v]) => { idbSet(k, v).catch(() => {}) })
+      }
       setReady(true)
-    }).catch(() => setReady(true))
+      setSyncing(false)
+    }).catch(() => {
+      // If Supabase is unreachable, fall back to whatever local cache we have
+      setReady(true)
+      setSyncing(false)
+    })
+
+    return () => { cancelled = true }
   }, [])
 
   const getCachedData = useCallback((since, until) => {
@@ -68,6 +94,8 @@ export function DataProvider({ children }) {
     const entry = { ...data, fetchedAt: Date.now() }
     setCache(prev => ({ ...prev, [key]: entry }))
     idbSet(key, entry).catch(e => console.warn('IDB save failed:', e))
+    // Write to shared Supabase cache so other devices get it too
+    setCacheEntry(key, data).catch(e => console.warn('Shared cache save failed:', e))
   }, [])
 
   // Generic cache for any key (used by Meta Ads etc)
@@ -77,10 +105,11 @@ export function DataProvider({ children }) {
     const entry = { ...data, fetchedAt: Date.now() }
     setCache(prev => ({ ...prev, [key]: entry }))
     idbSet(key, entry).catch(e => console.warn('IDB save failed:', e))
+    setCacheEntry(key, data).catch(e => console.warn('Shared cache save failed:', e))
   }, [])
 
   return (
-    <DataContext.Provider value={{ cache, getCachedData, setCachedData, getCacheByKey, setCacheByKey, ready }}>
+    <DataContext.Provider value={{ cache, getCachedData, setCachedData, getCacheByKey, setCacheByKey, ready, syncing }}>
       {children}
     </DataContext.Provider>
   )

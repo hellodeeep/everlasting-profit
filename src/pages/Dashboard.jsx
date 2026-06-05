@@ -24,6 +24,36 @@ function shiftDate(dateStr, days) {
   return d.toISOString().split('T')[0]
 }
 
+// ---- Monthly tabs ----
+const MONTH_START = { year: 2025, month: 4 } // month is 0-indexed, so 4 = May 2025
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function pad(n) { return String(n).padStart(2, '0') }
+
+// Build list of months from MONTH_START through the current month, newest first
+function buildMonths() {
+  const out = []
+  const now = new Date()
+  let y = MONTH_START.year
+  let m = MONTH_START.month
+  while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
+    const since = `${y}-${pad(m + 1)}-01`
+    const lastDay = new Date(y, m + 1, 0).getDate()
+    const until = `${y}-${pad(m + 1)}-${pad(lastDay)}`
+    const isCurrent = y === now.getFullYear() && m === now.getMonth()
+    out.push({
+      key: `m_${y}_${m}`,
+      label: `${MONTH_NAMES[m]} ${String(y).slice(2)}`,
+      since,
+      until,
+      isCurrent,
+    })
+    m++
+    if (m > 11) { m = 0; y++ }
+  }
+  return out.reverse() // newest first
+}
+
 function Stat({ label, value, sub, color = 'text-txt-primary' }) {
   return (
     <div className="glass-card glass-card-hover p-4 fade-in">
@@ -96,16 +126,21 @@ function exportCSV(pnl, dateLabel) {
 }
 
 export default function Dashboard() {
-  const { getCachedData, setCachedData, ready } = useDataStore()
+  const { getCachedData, setCachedData, ready, syncing } = useDataStore()
   const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
+  const [selectedMonth, setSelectedMonth] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [productFilter, setProductFilter] = useState(null)
   const [showPnL, setShowPnL] = useState(false)
   const [showVariants, setShowVariants] = useState(true)
 
-  const dateRange = preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
+  const months = useMemo(() => buildMonths(), [])
+
+  const dateRange = preset === 'month' && selectedMonth
+    ? { since: selectedMonth.since, until: selectedMonth.until }
+    : preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
   const dateLabel = dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`
   const cacheKey = `${dateRange.since}_${dateRange.until}`
 
@@ -226,6 +261,29 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Monthly tabs */}
+      <div className="glass-card p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Calendar size={14} className="text-txt-muted" />
+          <span className="text-xs font-semibold text-accent uppercase tracking-wider">Monthly</span>
+          {syncing && <span className="flex items-center gap-1 text-[10px] text-txt-muted"><RefreshCw size={9} className="animate-spin" /> syncing shared cache</span>}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {months.map(mo => {
+            const hasCached = !!getCachedData(mo.since, mo.until)
+            const isActive = preset === 'month' && selectedMonth?.key === mo.key
+            return (
+              <button key={mo.key}
+                onClick={() => { setPreset('month'); setSelectedMonth(mo); setProductFilter(null) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${isActive ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
+                {mo.label}{mo.isCurrent ? ' •' : ''}
+                {hasCached && !isActive && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cash-green" />}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Date Range */}
       <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
         {canNavigateDay && (
@@ -238,7 +296,7 @@ export default function Dashboard() {
           const range = pr.key !== 'custom' ? getDateRange(pr.key) : null
           const hasCached = range ? !!getCachedData(range.since, range.until) : false
           return (
-            <button key={pr.key} onClick={() => { setPreset(pr.key); setProductFilter(null) }}
+            <button key={pr.key} onClick={() => { setPreset(pr.key); setSelectedMonth(null); setProductFilter(null) }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${preset === pr.key ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
               {pr.label}
               {hasCached && preset !== pr.key && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cash-green" />}
