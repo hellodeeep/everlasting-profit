@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
-import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X } from 'lucide-react'
+import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X, Camera } from 'lucide-react'
+import Snapshot from './Snapshot'
 import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
@@ -208,6 +209,7 @@ export default function Targets() {
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, day: '' })
   const [showDaily, setShowDaily] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [showSnapshot, setShowSnapshot] = useState(false)
 
   // Load targets from cache or use defaults
   const rawTargets = useMemo(() => {
@@ -377,6 +379,9 @@ export default function Targets() {
           <p className="text-sm text-txt-muted mt-1">{monthName} | Day {daysElapsed}/{daysTotal} | {cachedDays}/{daysElapsed} days synced</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowSnapshot(true)} disabled={!hasFetched} className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40">
+            <Camera size={14} /> Snapshot
+          </button>
           <button onClick={() => setEditing(!editing)} className={`btn-ghost text-sm flex items-center gap-1.5 ${editing ? 'text-yellow-600' : ''}`}>
             <Settings size={14} /> {editing ? 'Editing...' : 'Edit Targets'}
           </button>
@@ -386,6 +391,18 @@ export default function Targets() {
           </button>
         </div>
       </div>
+
+      {/* Snapshot modal */}
+      {showSnapshot && (
+        <Snapshot
+          targets={targets}
+          mtdPnl={mtdPnl}
+          monthName={monthName}
+          daysElapsed={daysElapsed}
+          daysTotal={daysTotal}
+          onClose={() => setShowSnapshot(false)}
+        />
+      )}
 
       {/* Target Editor */}
       {editing && <TargetEditor rawTargets={rawTargets} onSave={saveTargets} onCancel={() => setEditing(false)} dbProducts={dbProducts} referenceData={referenceData} />}
