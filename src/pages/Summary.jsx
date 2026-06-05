@@ -1,14 +1,13 @@
 import React, { useState, useMemo } from 'react'
-import { Eye, EyeOff, ChevronLeft, ChevronRight, BarChart } from 'lucide-react'
+import { ChevronLeft, ChevronRight, BarChart, EyeOff, Eye } from 'lucide-react'
 import { useDataStore } from '../lib/dataStore'
-import { formatExact } from '../lib/profitEngine'
-import { calculateFullPnL } from '../lib/profitEngine'
+import { calculateFullPnL, formatExact } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { getDaysInMonth, getDaysElapsed, buildTargets, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
 
 const GST = 1.18
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const FIRST = { y: 2025, m: 4 } // May 2025 (0-indexed)
+const FIRST = { y: 2025, m: 4 }
 
 function compactINR(n) {
   const v = Math.abs(Math.round(n))
@@ -20,60 +19,20 @@ function compactINR(n) {
 }
 const pctTo = (t, a) => (!t ? 0 : Math.round((a / t) * 100))
 
-// A roomy SKU row: code on the left, four metric columns each with its own space
-function SkuRow({ t, actual, proRate, redact }) {
-  const aO = actual?.totalUnits || 0
-  const aM = (actual?.metaSpend || 0) / GST
-  const aP = actual?.profit || 0
-  const aRev = actual?.revenue || 0
-  const hasSpend = aM > 0
-  const aCAC = aO > 0 && hasSpend ? aM / aO : 0
-  const aAOV = aO > 0 ? aRev / aO : 0
-
-  const tOrders = Math.round(t.ordersMonthly * proRate)
-  const tProfit = Math.round((t.profitMonthly || 0) * proRate)
-
-  const ordGood = pctTo(tOrders, aO) >= 90
-  const cacGood = hasSpend && aCAC <= t.cac
-  const aovGood = aAOV >= t.aov * 0.95
-  const profitGood = pctTo(tProfit, aP) >= 90
-  const goalPct = pctTo(tProfit, aP)
-
-  const green = '#16a34a', red = '#dc2626'
-
-  const Col = ({ label, value, target, good, warn, hide }) => (
-    <div className="flex-1 min-w-0 px-2">
-      <p className="uppercase tracking-wider mb-1 text-txt-muted" style={{ fontSize: '10px' }}>{label}</p>
-      <p className="font-mono font-bold leading-none truncate" style={{ fontSize: '18px', color: warn ? red : good ? green : '#1f2937' }}>
-        {hide ? '•••' : value}
-      </p>
-      <p className="font-mono text-txt-muted mt-1 truncate" style={{ fontSize: '10px' }}>tgt {hide ? '•••' : target}</p>
-    </div>
-  )
-
-  return (
-    <div className="glass-card px-4 py-3.5 flex items-center gap-3">
-      <div className="flex flex-col items-start gap-1.5" style={{ width: '92px' }}>
-        <span className="font-mono font-bold px-2.5 py-1 rounded-lg" style={{ fontSize: '15px', background: '#e9d5f6', color: '#372348' }}>{t.code}</span>
-        <span className="font-mono font-bold" style={{ fontSize: '11px', color: hasSpend ? (profitGood ? green : goalPct >= 70 ? '#ca8a04' : red) : red }}>
-          {hasSpend ? `${goalPct}% goal` : 'no spend'}
-        </span>
-      </div>
-      <div className="flex flex-1 min-w-0" style={{ borderLeft: '1px solid rgba(55,35,72,0.08)' }}>
-        <Col label="Orders" value={formatExact(aO)} target={formatExact(tOrders)} good={ordGood} hide={false} />
-        <Col label="CAC" value={hasSpend ? `₹${formatExact(Math.round(aCAC))}` : '--'} target={`₹${formatExact(Math.round(t.cac))}`} good={cacGood} warn={!hasSpend} hide={false} />
-        <Col label="AOV" value={`₹${formatExact(Math.round(aAOV))}`} target={`₹${formatExact(Math.round(t.aov))}`} good={aovGood} hide={redact} />
-        <Col label="Profit" value={`₹${compactINR(aP)}`} target={`₹${compactINR(tProfit)}`} good={profitGood} hide={redact} />
-      </div>
-    </div>
-  )
+// Achievement vs target: returns {text, cls} for absolute variance
+function variance(target, actual, lowerIsBetter = false) {
+  if (!target) return { pct: 0, cls: 'text-txt-muted' }
+  const pct = Math.round((actual / target) * 100)
+  let good
+  if (lowerIsBetter) good = actual <= target
+  else good = pct >= 90
+  return { pct, cls: good ? 'text-cash-green' : pct >= 70 && !lowerIsBetter ? 'text-yellow-600' : 'text-cash-red' }
 }
 
 export default function Summary() {
   const { cache, getCachedData, getCacheByKey, ready } = useDataStore()
-  const [redact, setRedact] = useState(false)
+  const [anon, setAnon] = useState(false)
 
-  // Month navigation, default to current month
   const now = new Date()
   const [sel, setSel] = useState({ y: now.getFullYear(), m: now.getMonth() })
   const monthStr = `${sel.y}-${String(sel.m + 1).padStart(2, '0')}`
@@ -92,17 +51,15 @@ export default function Summary() {
 
   const daysTotal = getDaysInMonth(monthStr)
   const daysElapsed = getDaysElapsed(monthStr)
-  const proRate = daysElapsed >= daysTotal ? 1 : (daysElapsed > 0 ? daysElapsed / daysTotal : 1)
   const isClosed = daysElapsed >= daysTotal
+  const proRate = isClosed ? 1 : (daysElapsed > 0 ? daysElapsed / daysTotal : 1)
 
-  // Targets config (uses saved month's target shape; codes + per-SKU targets)
   const rawTargets = useMemo(() => {
     const saved = getCacheByKey(TARGETS_CACHE_KEY)
     return saved?.data || DEFAULT_RAW_TARGETS
   }, [getCacheByKey, ready])
   const targets = useMemo(() => buildTargets({ ...rawTargets, month: monthStr }), [rawTargets, monthStr])
 
-  // Aggregate actuals for the selected month from cached daily data
   const { mtdPnl, hasData } = useMemo(() => {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
@@ -116,7 +73,6 @@ export default function Summary() {
       allOrders.push(...data.orders)
       allCampaigns.push(...(data.metaCampaigns || []))
     }
-    // Also try a full-month single-range cache (from the Dashboard monthly tabs)
     if (allOrders.length === 0) {
       const since = `${monthStr}-01`
       const until = `${monthStr}-${String(daysTotal).padStart(2, '0')}`
@@ -131,8 +87,37 @@ export default function Summary() {
     return { mtdPnl: calculateFullPnL(allOrders, meta, vendorPriceMap), hasData: true }
   }, [cache, monthStr, daysElapsed, daysTotal, isClosed, getCachedData])
 
+  // Per-SKU rows merging target + actual
+  const rows = useMemo(() => {
+    return targets.products.map((t, i) => {
+      const a = mtdPnl?.products.find(pr => pr.name === t.name)
+      const aO = a?.totalUnits || 0
+      const aSpend = (a?.metaSpend || 0) / GST
+      const aRev = a?.revenue || 0
+      const aProfit = a?.profit || 0
+      const hasSpend = aSpend > 0
+      const aCAC = aO > 0 && hasSpend ? aSpend / aO : 0
+      const aAOV = aO > 0 ? aRev / aO : 0
+      const aPPO = aO > 0 ? aProfit / aO : 0
+      const aMargin = aRev > 0 ? aProfit / aRev : 0
+      const tOrders = Math.round(t.ordersMonthly * proRate)
+      const tProfit = Math.round((t.profitMonthly || 0) * proRate)
+      const tRevenue = Math.round((t.revenueMonthly || 0) * proRate)
+      const tSpend = Math.round((t.spendMonthly || 0) * proRate)
+      return {
+        label: anon ? `SKU ${i + 1}` : t.code,
+        tOrders, aO, tCAC: t.cac, aCAC, hasSpend,
+        tAOV: t.aov, aAOV, tRevenue, aRev, tSpend, aSpend,
+        tProfit, aProfit, aPPO, aMargin,
+        prepaidPct: a?.prepaidPct || 0, c2pPct: a?.c2pPct || 0, codPct: a?.codPct || 0,
+      }
+    })
+  }, [targets, mtdPnl, proRate, anon])
+
   // Totals
   const tProfitTotal = Math.round(targets.totalProfit * proRate)
+  const tRevTotal = Math.round(targets.totalRevenue * proRate)
+  const tOrdTotal = Math.round(targets.products.reduce((s, t) => s + t.ordersMonthly, 0) * proRate)
   const aOrders = mtdPnl?.overview.activeOrders || 0
   const aProfit = mtdPnl?.profit.expected || 0
   const aRev = mtdPnl?.revenue.expectedRevenue || 0
@@ -140,15 +125,26 @@ export default function Summary() {
   const aCAC = aOrders > 0 ? aSpend / aOrders : 0
   const aMargin = aRev > 0 ? aProfit / aRev : 0
   const profitPct = pctTo(tProfitTotal, aProfit)
-  const goalColor = profitPct >= 90 ? '#34d399' : profitPct >= 70 ? '#fbbf24' : '#f87171'
+
+  // KPI tile
+  const Kpi = ({ label, actual, target, sub, color }) => (
+    <div className="glass-card p-4">
+      <p className="metric-label mb-1">{label}</p>
+      <p className={`text-2xl font-bold font-mono ${color || 'text-txt-primary'}`}>{actual}</p>
+      {target && <p className="text-[11px] text-txt-muted mt-1">target {target}</p>}
+      {sub && <p className="text-[11px] text-txt-muted mt-0.5">{sub}</p>}
+    </div>
+  )
+
+  const cell = (val, cls = 'text-txt-secondary') => <td className={`py-3 px-3 text-right font-mono text-xs ${cls}`}>{val}</td>
+  const tgtCell = (val) => <td className="py-3 px-3 text-right font-mono text-[11px] text-txt-muted">{val}</td>
 
   return (
     <div className="space-y-4 fade-in">
-      {/* Page header + controls (not part of the shareable card) */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-accent">Monthly Summary</h2>
-          <p className="text-sm text-txt-muted mt-0.5">Target vs achievement, built to screenshot and share</p>
+          <p className="text-sm text-txt-muted mt-0.5">Target vs reality · {isClosed ? 'final' : `day ${daysElapsed} of ${daysTotal}, targets pro-rated`}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 glass-card px-1.5 py-1">
@@ -160,9 +156,9 @@ export default function Summary() {
               <ChevronRight size={16} />
             </button>
           </div>
-          <button onClick={() => setRedact(r => !r)} className="btn-ghost text-sm flex items-center gap-1.5">
-            {redact ? <EyeOff size={14} /> : <Eye size={14} />}
-            {redact ? 'Redacted' : 'Full numbers'}
+          <button onClick={() => setAnon(a => !a)} className={`btn-ghost text-sm flex items-center gap-1.5 ${anon ? 'text-accent' : ''}`}>
+            {anon ? <EyeOff size={14} /> : <Eye size={14} />}
+            {anon ? 'SKU codes hidden' : 'Show SKU codes'}
           </button>
         </div>
       </div>
@@ -177,64 +173,112 @@ export default function Summary() {
 
       {hasData && (
         <>
-          {/* THE SHAREABLE CARD */}
-          <div id="summary-card" className="rounded-3xl overflow-hidden shadow-2xl"
-            style={{ background: 'linear-gradient(135deg, #2d1c3c 0%, #3d2750 45%, #543470 100%)' }}>
+          {/* KPI band */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Kpi label={isClosed ? 'Net Profit' : 'Profit so far'} actual={`₹${compactINR(aProfit)}`} target={`₹${compactINR(tProfitTotal)}`}
+              sub={`${profitPct}% of target`} color={profitPct >= 90 ? 'text-cash-green' : profitPct >= 70 ? 'text-yellow-600' : 'text-cash-red'} />
+            <Kpi label="Revenue" actual={`₹${compactINR(aRev)}`} target={`₹${compactINR(tRevTotal)}`} sub={`${pctTo(tRevTotal, aRev)}% of target`} />
+            <Kpi label="Orders" actual={formatExact(aOrders)} target={formatExact(tOrdTotal)} sub={`${pctTo(tOrdTotal, aOrders)}% of target`} />
+            <Kpi label="Blended CAC" actual={`₹${formatExact(Math.round(aCAC))}`} sub="pre-GST" />
+            <Kpi label="Margin" actual={`${(aMargin * 100).toFixed(1)}%`} sub={`₹${compactINR(aSpend)} ad spend`} />
+          </div>
 
-            {/* Brand bar */}
-            <div className="flex items-center justify-between px-7 pt-6">
-              <span className="font-black tracking-[0.25em] uppercase" style={{ fontSize: '18px', color: '#e9d5f6' }}>Everlasting</span>
-              <span className="font-medium px-3.5 py-1.5 rounded-full" style={{ fontSize: '13px', background: 'rgba(233,213,246,0.14)', color: '#e9d5f6' }}>
-                {monthName} {isClosed ? '· Final' : `· Day ${daysElapsed}/${daysTotal}`}
-              </span>
+          {/* Detailed per-SKU table */}
+          <div className="glass-card overflow-hidden">
+            <div className="px-5 py-3 border-b border-brand-300/50 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-accent">Per-SKU: Target vs Actual</h3>
+              <span className="text-[11px] text-txt-muted">{monthName} {isClosed ? '· final' : '· MTD'}</span>
             </div>
-
-            {/* Hero strip */}
-            <div className="px-7 pt-5 pb-5 flex items-end justify-between flex-wrap gap-4"
-              style={{ borderBottom: '1px solid rgba(233,213,246,0.12)' }}>
-              <div>
-                <p className="uppercase tracking-wider mb-1.5" style={{ fontSize: '13px', color: 'rgba(233,213,246,0.6)' }}>
-                  {isClosed ? 'Net Profit' : 'Profit so far'}
-                </p>
-                <div className="flex items-end gap-3">
-                  <span className="font-black leading-none" style={{ fontSize: 'clamp(44px, 7vw, 68px)', color: '#fff' }}>
-                    {redact ? '••••' : `₹${compactINR(aProfit)}`}
-                  </span>
-                  <span className="font-bold mb-1.5" style={{ fontSize: '20px', color: goalColor }}>{profitPct}% of target</span>
-                </div>
-              </div>
-              <div className="flex gap-7 pb-1">
-                <div>
-                  <p className="uppercase tracking-wider" style={{ fontSize: '11px', color: 'rgba(233,213,246,0.5)' }}>Margin</p>
-                  <p className="font-mono font-bold" style={{ fontSize: '20px', color: '#fff' }}>{(aMargin * 100).toFixed(1)}%</p>
-                </div>
-                <div>
-                  <p className="uppercase tracking-wider" style={{ fontSize: '11px', color: 'rgba(233,213,246,0.5)' }}>Orders</p>
-                  <p className="font-mono font-bold" style={{ fontSize: '20px', color: '#fff' }}>{formatExact(aOrders)}</p>
-                </div>
-                <div>
-                  <p className="uppercase tracking-wider" style={{ fontSize: '11px', color: 'rgba(233,213,246,0.5)' }}>Blended CAC</p>
-                  <p className="font-mono font-bold" style={{ fontSize: '20px', color: '#fff' }}>₹{formatExact(Math.round(aCAC))}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* SKU rows on a white panel for clarity */}
-            <div className="px-7 py-6 space-y-3" style={{ background: 'rgba(248,245,251,0.97)' }}>
-              {targets.products.map(t => {
-                const actual = mtdPnl?.products.find(pr => pr.name === t.name)
-                return <SkuRow key={t.code} t={t} actual={actual} proRate={proRate} redact={redact} />
-              })}
-            </div>
-
-            {/* Footer */}
-            <div className="px-7 py-3 flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.2)' }}>
-              <span style={{ fontSize: '12px', color: 'rgba(233,213,246,0.6)' }}>Target vs Actual · vibecoded in-house</span>
-              <span className="font-mono" style={{ fontSize: '12px', color: 'rgba(233,213,246,0.45)' }}>everlasting.shop</span>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
+                    <th className="py-2.5 px-4">SKU</th>
+                    <th className="py-2.5 px-3 text-right">Orders</th>
+                    <th className="py-2.5 px-3 text-right">CAC</th>
+                    <th className="py-2.5 px-3 text-right">AOV</th>
+                    <th className="py-2.5 px-3 text-right">Revenue</th>
+                    <th className="py-2.5 px-3 text-right">Ad Spend</th>
+                    <th className="py-2.5 px-3 text-right">Profit</th>
+                    <th className="py-2.5 px-3 text-right">₹/order</th>
+                    <th className="py-2.5 px-3 text-right">Margin</th>
+                    <th className="py-2.5 px-3 text-right">Pre/C2P/COD</th>
+                    <th className="py-2.5 px-3 text-right">Goal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(r => {
+                    const ordV = variance(r.tOrders, r.aO)
+                    const cacV = variance(r.tCAC, r.aCAC, true)
+                    const aovV = variance(r.tAOV, r.aAOV)
+                    const profV = variance(r.tProfit, r.aProfit)
+                    return (
+                      <tr key={r.label} className="border-b border-brand-300/50/50 hover:bg-ev-light align-top">
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-xs px-2 py-1 rounded-lg bg-ev-light text-accent">{r.label}</span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className={`font-mono text-xs font-bold ${ordV.cls}`}>{formatExact(r.aO)}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt {formatExact(r.tOrders)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className={`font-mono text-xs font-bold ${r.hasSpend ? cacV.cls : 'text-cash-red'}`}>{r.hasSpend ? `₹${formatExact(Math.round(r.aCAC))}` : 'no spend'}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt ₹{formatExact(r.tCAC)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className={`font-mono text-xs font-bold ${aovV.cls}`}>₹{formatExact(Math.round(r.aAOV))}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt ₹{formatExact(r.tAOV)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="font-mono text-xs text-txt-secondary">₹{compactINR(r.aRev)}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt ₹{compactINR(r.tRevenue)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="font-mono text-xs text-txt-secondary">₹{compactINR(r.aSpend)}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt ₹{compactINR(r.tSpend)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className={`font-mono text-xs font-bold ${profV.cls}`}>₹{compactINR(r.aProfit)}</div>
+                          <div className="font-mono text-[10px] text-txt-muted">tgt ₹{compactINR(r.tProfit)}</div>
+                        </td>
+                        {cell(`₹${formatExact(Math.round(r.aPPO))}`)}
+                        {cell(`${(r.aMargin * 100).toFixed(1)}%`, r.aMargin >= 0.15 ? 'text-cash-green' : 'text-yellow-600')}
+                        <td className="py-3 px-3 text-right font-mono text-[11px] text-txt-muted">
+                          {Math.round(r.prepaidPct * 100)}/{Math.round(r.c2pPct * 100)}/{Math.round(r.codPct * 100)}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${profV.cls} ${profV.pct >= 90 ? 'bg-green-50' : profV.pct >= 70 ? 'bg-yellow-50' : 'bg-red-50'}`}>
+                            {r.hasSpend ? `${profV.pct}%` : '--'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-brand-300 bg-ev-light font-bold">
+                    <td className="py-3 px-4 text-xs text-accent">TOTAL</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">{formatExact(aOrders)}<div className="text-[10px] text-txt-muted font-normal">tgt {formatExact(tOrdTotal)}</div></td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{formatExact(Math.round(aCAC))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{aOrders > 0 ? formatExact(Math.round(aRev / aOrders)) : 0}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{compactINR(aRev)}<div className="text-[10px] text-txt-muted font-normal">tgt ₹{compactINR(tRevTotal)}</div></td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{compactINR(aSpend)}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{compactINR(aProfit)}<div className="text-[10px] text-txt-muted font-normal">tgt ₹{compactINR(tProfitTotal)}</div></td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{aOrders > 0 ? formatExact(Math.round(aProfit / aOrders)) : 0}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">{(aMargin * 100).toFixed(1)}%</td>
+                    <td className="py-3 px-3"></td>
+                    <td className="py-3 px-3 text-right">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${profitPct >= 90 ? 'text-cash-green bg-green-50' : profitPct >= 70 ? 'text-yellow-600 bg-yellow-50' : 'text-cash-red bg-red-50'}`}>{profitPct}%</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
 
-          <p className="text-center text-xs text-txt-muted">Screenshot the card above to post. Use the month arrows to switch months, and Redacted to hide rupee figures.</p>
+          <p className="text-[11px] text-txt-muted px-1">
+            CAC and ad spend are pre-GST. Green means at or above 90% of target (CAC green when at or below target). "no spend" means no Meta spend mapped to that SKU's campaign code, so its profit is overstated. Pre/C2P/COD is the order-count split. {!isClosed && 'Targets are pro-rated to days elapsed.'}
+          </p>
         </>
       )}
     </div>
