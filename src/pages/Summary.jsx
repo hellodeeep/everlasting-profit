@@ -104,11 +104,20 @@ export default function Summary() {
       const tProfit = Math.round((t.profitMonthly || 0) * proRate)
       const tRevenue = Math.round((t.revenueMonthly || 0) * proRate)
       const tSpend = Math.round((t.spendMonthly || 0) * proRate)
+      const tPPO = t.ordersMonthly > 0 ? (t.profitMonthly || 0) / t.ordersMonthly : 0
+      // Bridge: split profit gap into volume effect + unit-economics effect
+      // volume = (actualOrders - targetOrders) * targetPPO
+      // unitEcon = actualOrders * (actualPPO - targetPPO)
+      const volumeEffect = (aO - tOrders) * tPPO
+      const unitEffect = aO * (aPPO - tPPO)
       return {
+        name: t.name,
         label: anon ? `SKU ${i + 1}` : t.code,
         tOrders, aO, tCAC: t.cac, aCAC, hasSpend,
         tAOV: t.aov, aAOV, tRevenue, aRev, tSpend, aSpend,
-        tProfit, aProfit, aPPO, aMargin,
+        tProfit, aProfit, aPPO, tPPO, aMargin,
+        volumeEffect, unitEffect,
+        profitGap: aProfit - tProfit,
         prepaidPct: a?.prepaidPct || 0, c2pPct: a?.c2pPct || 0, codPct: a?.codPct || 0,
       }
     })
@@ -125,6 +134,82 @@ export default function Summary() {
   const aCAC = aOrders > 0 ? aSpend / aOrders : 0
   const aMargin = aRev > 0 ? aProfit / aRev : 0
   const profitPct = pctTo(tProfitTotal, aProfit)
+
+  // ---- Profit bridge: decompose total profit gap into named drivers ----
+  const bridge = useMemo(() => {
+    // Use summed SKU profit so the bridge ties exactly (target + volume + unit = actual)
+    const skuProfit = rows.reduce((s, r) => s + r.aProfit, 0)
+    const totalGap = skuProfit - tProfitTotal
+    const totalVolume = rows.reduce((s, r) => s + r.volumeEffect, 0)
+    const totalUnit = rows.reduce((s, r) => s + r.unitEffect, 0)
+    const ranked = [...rows].sort((a, b) => b.profitGap - a.profitGap)
+    const topDriver = ranked[0]
+    const topDrag = ranked[ranked.length - 1]
+    return { totalGap, totalVolume, totalUnit, ranked, topDriver, topDrag, skuProfit }
+  }, [rows, tProfitTotal])
+
+  // ---- Plain-English recap ----
+  const recap = useMemo(() => {
+    if (!hasData || rows.length === 0) return []
+    const lines = []
+    const beat = bridge.totalGap >= 0
+    const absGap = Math.abs(bridge.totalGap)
+    const period = isClosed ? monthName : `${monthName} so far`
+    const skuProfitPct = pctTo(tProfitTotal, bridge.skuProfit)
+
+    // 1. Headline
+    lines.push(
+      `${period}: profit ${beat ? 'beat' : 'missed'} target by ₹${compactINR(absGap)} (${skuProfitPct}% of the ₹${compactINR(tProfitTotal)} ${isClosed ? '' : 'pro-rated '}goal), landing at ₹${compactINR(bridge.skuProfit)} on ${formatExact(aOrders)} orders.`
+    )
+
+    // 2. What drove it: volume vs unit economics
+    const volBeat = bridge.totalVolume >= 0
+    const unitBeat = bridge.totalUnit >= 0
+    if (Math.abs(bridge.totalVolume) > Math.abs(bridge.totalUnit)) {
+      lines.push(
+        `The swing was mostly about volume: you ran ${volBeat ? 'ahead of' : 'behind'} the order plan, worth ${volBeat ? '+' : '-'}₹${compactINR(Math.abs(bridge.totalVolume))} of profit. Per-order economics ${unitBeat ? 'added' : 'cost'} another ${unitBeat ? '+' : '-'}₹${compactINR(Math.abs(bridge.totalUnit))}.`
+      )
+    } else {
+      lines.push(
+        `The swing was mostly about unit economics: each order was ${unitBeat ? 'more' : 'less'} profitable than planned, worth ${unitBeat ? '+' : '-'}₹${compactINR(Math.abs(bridge.totalUnit))}. Order volume ${volBeat ? 'added' : 'cost'} another ${volBeat ? '+' : '-'}₹${compactINR(Math.abs(bridge.totalVolume))}.`
+      )
+    }
+
+    // 3. AOV vs CAC commentary at the blended level
+    const blendedAOV = aOrders > 0 ? aRev / aOrders : 0
+    const tBlendedAOV = tOrdTotal > 0 ? tRevTotal / tOrdTotal : 0
+    const tBlendedCAC = tOrdTotal > 0 ? (targets.products.reduce((s,t)=>s+t.spendMonthly,0) * proRate) / tOrdTotal : 0
+    const aovDelta = blendedAOV - tBlendedAOV
+    const cacDelta = aCAC - tBlendedCAC
+    lines.push(
+      `AOV came in at ₹${formatExact(Math.round(blendedAOV))} vs ₹${formatExact(Math.round(tBlendedAOV))} planned (${aovDelta >= 0 ? '+' : ''}₹${formatExact(Math.round(aovDelta))}), and CAC at ₹${formatExact(Math.round(aCAC))} vs ₹${formatExact(Math.round(tBlendedCAC))} planned (${cacDelta <= 0 ? '' : '+'}₹${formatExact(Math.round(cacDelta))}). ${cacDelta <= 0 ? 'Cheaper acquisition carried the month even with AOV soft.' : 'Acquisition got more expensive, so volume had to make up the difference.'}`
+    )
+
+    // 4. Top driver + top drag SKU
+    const d = bridge.topDriver, g = bridge.topDrag
+    if (d && d.profitGap > 0) {
+      lines.push(
+        `${d.label} was the engine: ₹${compactINR(d.aProfit)} profit, ${pctTo(d.tProfit, d.aProfit)}% of its goal, on ${formatExact(d.aO)} orders (target ${formatExact(d.tOrders)}) at ₹${formatExact(Math.round(d.aCAC))} CAC.`
+      )
+    }
+    if (g && g !== d && g.profitGap < 0) {
+      lines.push(
+        `${g.label} was the drag: ₹${compactINR(g.aProfit)} profit, only ${pctTo(g.tProfit, g.aProfit)}% of its goal, missing on orders (${formatExact(g.aO)} vs ${formatExact(g.tOrders)} planned).`
+      )
+    }
+
+    // 5. Flag unmapped spend
+    const noSpend = rows.filter(r => !r.hasSpend && r.aO > 0)
+    if (noSpend.length > 0) {
+      lines.push(
+        `Caution: ${noSpend.map(r => r.label).join(', ')} ${noSpend.length > 1 ? 'have' : 'has'} no Meta spend mapped, so the profit shown there is overstated. Fix the campaign code to make these numbers true.`
+      )
+    }
+    return lines
+  }, [hasData, rows, bridge, isClosed, monthName, profitPct, tProfitTotal, aProfit, aOrders, aRev, aCAC, tOrdTotal, tRevTotal, targets, proRate])
+
+  // bar widths for the bridge viz
+  const bridgeMax = Math.max(Math.abs(bridge.totalVolume), Math.abs(bridge.totalUnit), 1)
 
   // KPI tile
   const Kpi = ({ label, actual, target, sub, color }) => (
@@ -181,6 +266,55 @@ export default function Summary() {
             <Kpi label="Orders" actual={formatExact(aOrders)} target={formatExact(tOrdTotal)} sub={`${pctTo(tOrdTotal, aOrders)}% of target`} />
             <Kpi label="Blended CAC" actual={`₹${formatExact(Math.round(aCAC))}`} sub="pre-GST" />
             <Kpi label="Margin" actual={`${(aMargin * 100).toFixed(1)}%`} sub={`₹${compactINR(aSpend)} ad spend`} />
+          </div>
+
+          {/* Profit bridge: what drove the beat/miss */}
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-accent">Profit Bridge · why we {bridge.totalGap >= 0 ? 'beat' : 'missed'} target</h3>
+              <span className={`text-xs font-bold font-mono ${bridge.totalGap >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>
+                {bridge.totalGap >= 0 ? '+' : '-'}₹{compactINR(Math.abs(bridge.totalGap))} vs target
+              </span>
+            </div>
+
+            {/* Bridge bars */}
+            <div className="space-y-3 mb-5">
+              {[
+                { label: 'Target profit', value: tProfitTotal, kind: 'base' },
+                { label: 'Order volume effect', value: bridge.totalVolume, kind: 'delta' },
+                { label: 'Unit economics effect', value: bridge.totalUnit, kind: 'delta' },
+                { label: 'Actual profit', value: bridge.skuProfit, kind: 'base' },
+              ].map((b, i) => {
+                const isDelta = b.kind === 'delta'
+                const pos = b.value >= 0
+                const width = isDelta ? Math.abs(b.value) / bridgeMax * 50 : Math.min(100, b.value / Math.max(tProfitTotal, aProfit, 1) * 100)
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-xs text-txt-muted w-40 shrink-0">{b.label}</span>
+                    <div className="flex-1 h-6 rounded-lg bg-brand-200/40 relative overflow-hidden flex items-center">
+                      {isDelta ? (
+                        <div className={`h-full ${pos ? 'bg-cash-green/70' : 'bg-cash-red/70'}`}
+                          style={{ width: `${width}%`, marginLeft: pos ? '50%' : `${50 - width}%` }} />
+                      ) : (
+                        <div className="h-full bg-accent/80" style={{ width: `${width}%` }} />
+                      )}
+                    </div>
+                    <span className={`text-xs font-mono font-bold w-24 text-right shrink-0 ${isDelta ? (pos ? 'text-cash-green' : 'text-cash-red') : 'text-txt-primary'}`}>
+                      {isDelta && pos ? '+' : ''}{isDelta && !pos ? '-' : ''}₹{compactINR(Math.abs(b.value))}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Plain-English recap */}
+            <div className="space-y-2 pt-4 border-t border-brand-300/50">
+              {recap.map((line, i) => (
+                <p key={i} className={`text-sm leading-relaxed ${i === 0 ? 'font-semibold text-txt-primary' : 'text-txt-secondary'}`}>
+                  {line}
+                </p>
+              ))}
+            </div>
           </div>
 
           {/* Detailed per-SKU table */}
