@@ -85,6 +85,24 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
         <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
       </div>
 
+      {(() => {
+        const anyRef = Object.values(referenceData)[0]
+        if (!anyRef) return null
+        return (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-ev-light border border-brand-300/50 flex items-center justify-between flex-wrap gap-2">
+            <p className="text-[11px] text-accent">
+              <span className="font-semibold">Reference window:</span> {anyRef.rangeLabel} ({anyRef.daysWithData} days synced)
+              <span className="text-txt-muted"> — set Meta to this exact range to compare</span>
+            </p>
+            {anyRef.missingDates.length > 0 && (
+              <p className="text-[11px] text-yellow-600">
+                ⚠ {anyRef.missingDates.length} gap{anyRef.missingDates.length > 1 ? 's' : ''} inside the window — sync from Dashboard for a clean match
+              </p>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Products */}
       <div className="space-y-4">
         {form.products.map((p, idx) => {
@@ -325,6 +343,8 @@ export default function Targets() {
     const ref = {}
     let allOrders = [], allCampaigns = []
     let daysWithData = 0
+    const syncedDates = []
+    const missingDates = []
 
     // True rolling 30-day window (yesterday back 30 days)
     for (let i = 1; i <= 30; i++) {
@@ -332,13 +352,23 @@ export default function Targets() {
       d.setDate(d.getDate() - i)
       const ds = d.toISOString().split('T')[0]
       const data = getCachedData(ds, ds)
-      if (!data?.orders) continue
+      if (!data?.orders) { missingDates.push(ds); continue }
       daysWithData++
+      syncedDates.push(ds)
       allOrders.push(...data.orders)
       allCampaigns.push(...(data.metaCampaigns || []))
     }
 
     if (allOrders.length === 0 || daysWithData === 0) return ref
+
+    syncedDates.sort()
+    const rangeStart = syncedDates[0]
+    const rangeEnd = syncedDates[syncedDates.length - 1]
+    const fmt = (ds) => {
+      const [y, m, dd] = ds.split('-')
+      return `${dd} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m) - 1]}`
+    }
+    const rangeLabel = `${fmt(rangeStart)} - ${fmt(rangeEnd)}`
 
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
@@ -361,6 +391,8 @@ export default function Targets() {
         profitPerDay: (prod.profit || 0) / daysWithData,
         margin: prod.margin || 0,
         daysWithData,
+        rangeStart, rangeEnd, rangeLabel,
+        missingDates: missingDates.filter(d => d >= rangeStart && d <= rangeEnd),
       }
     })
     return ref
