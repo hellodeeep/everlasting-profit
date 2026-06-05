@@ -113,7 +113,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Monthly Orders</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.ordersMonthly || ''} onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">{daily}/day</p>
-                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total)</p>}
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d synced: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total){ref.daysWithData < 30 ? ' ⚠' : ''}</p>}
                 </div>
 
                 {/* Target CAC */}
@@ -121,7 +121,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Target CAC (pre-GST)</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.cac || ''} onChange={e => updateProduct(idx, 'cac', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">Spend: ₹{formatExact(spend)}/day</p>
-                  {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>Last 30d: ₹{Math.round(ref.cac)}</p>}
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>{ref.daysWithData}d: ₹{Math.round(ref.cac)}</p>}
                 </div>
 
                 {/* Target AOV */}
@@ -129,7 +129,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Target AOV</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.aov || ''} onChange={e => updateProduct(idx, 'aov', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">Rev: ₹{formatExact((p.ordersMonthly||0) * (p.aov||0))}/mo</p>
-                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-600'}`}>Last 30d: ₹{Math.round(ref.aov)}</p>}
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-600'}`}>{ref.daysWithData}d: ₹{Math.round(ref.aov)}</p>}
                 </div>
 
                 {/* Vendor Price */}
@@ -144,7 +144,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Prepaid %</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.prepaidRate || ''} onChange={e => updateProduct(idx, 'prepaidRate', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">C2P: {p.c2pRate || 10}% | COD: {100 - (p.prepaidRate||75) - (p.c2pRate||10)}%</p>
-                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
                 </div>
 
                 {/* Auto-calculated Profit */}
@@ -154,7 +154,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <p className="text-[9px] text-txt-muted mt-0.5">
                     {(est.profitPct * 100).toFixed(1)}% margin | ₹{Math.round(est.profitPerOrder)}/order
                   </p>
-                  {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
+                  {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
                 </div>
               </div>
             </div>
@@ -319,14 +319,15 @@ export default function Targets() {
   const neededSpendDay = daysRemaining > 0 ? Math.ceil((targets.products.reduce((s,t) => s+t.spendMonthly,0) - aSpend) / daysRemaining) : tSpendDaily
   const neededRevDay = daysRemaining > 0 ? Math.ceil((targets.totalRevenue - aRev) / daysRemaining) : Math.round(targets.totalRevenue / daysTotal)
 
-  // Build last 7 days reference data per product from dashboard cache
+  // Build last 30 days reference data per product from dashboard cache
   const referenceData = useMemo(() => {
     const today = new Date()
     const ref = {}
     let allOrders = [], allCampaigns = []
     let daysWithData = 0
 
-    for (let i = 1; i <= 7; i++) {
+    // True rolling 30-day window (yesterday back 30 days)
+    for (let i = 1; i <= 30; i++) {
       const d = new Date(today)
       d.setDate(d.getDate() - i)
       const ds = d.toISOString().split('T')[0]
