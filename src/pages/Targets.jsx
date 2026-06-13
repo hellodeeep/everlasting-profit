@@ -629,10 +629,70 @@ export default function Targets() {
       {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-txt-muted mx-auto mb-3 animate-spin" /><p className="text-sm text-txt-muted">Loading cached data...</p></div>}
 
       {ready && !winStarted && (
-        <div className="glass-card p-10 text-center">
-          <Calendar size={48} className="text-txt-muted mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-accent mb-2">Window hasn't started</h3>
-          <p className="text-sm text-txt-muted">This target runs {winLabelLong}. Tracking begins on the start date.</p>
+        <div className="space-y-4">
+          <div className="glass-card p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar size={18} className="text-accent" />
+              <h3 className="text-lg font-semibold text-accent">Daily plan for {winLabelLong}</h3>
+            </div>
+            <p className="text-sm text-txt-muted">{winDays} days · starts in {Math.max(0, Math.round((new Date(winStart+'T00:00:00') - new Date(todayStr+'T00:00:00'))/86400000))} day{Math.round((new Date(winStart+'T00:00:00') - new Date(todayStr+'T00:00:00'))/86400000) !== 1 ? 's' : ''}. Here's what each product needs every day to hit target.</p>
+          </div>
+
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
+                  <th className="py-2.5 px-4">Product</th>
+                  <th className="py-2.5 px-3 text-right">Orders/day</th>
+                  <th className="py-2.5 px-3 text-right">CAC benchmark<br/>(pre-GST)</th>
+                  <th className="py-2.5 px-3 text-right">Daily budget<br/>(pre-GST)</th>
+                  <th className="py-2.5 px-3 text-right">Daily budget<br/>(with GST)</th>
+                  <th className="py-2.5 px-3 text-right">AOV target</th>
+                  <th className="py-2.5 px-3 text-right">Revenue/day</th>
+                  <th className="py-2.5 px-3 text-right">Profit/day</th>
+                  <th className="py-2.5 px-3 text-right">Window orders</th>
+                </tr></thead>
+                <tbody>
+                  {targets.products.map(t => {
+                    const ordDay = (t.ordersMonthly || 0) / winDays
+                    const budgetPre = ordDay * (t.cac || 0)
+                    const budgetGst = budgetPre * GST
+                    const revDay = ordDay * (t.aov || 0)
+                    const profitDay = (t.profitMonthly || 0) / winDays
+                    return (
+                      <tr key={t.code} className="border-b border-brand-300/50/50 hover:bg-ev-light">
+                        <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{t.code}</span></div></td>
+                        <td className="py-3 px-3 text-right font-mono text-sm font-bold text-txt-primary">{Math.round(ordDay)}</td>
+                        <td className="py-3 px-3 text-right font-mono text-sm text-accent font-bold">₹{formatExact(t.cac)}</td>
+                        <td className="py-3 px-3 text-right font-mono text-sm font-bold text-txt-primary">₹{formatExact(Math.round(budgetPre))}</td>
+                        <td className="py-3 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(Math.round(budgetGst))}</td>
+                        <td className="py-3 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(t.aov)}</td>
+                        <td className="py-3 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(Math.round(revDay))}</td>
+                        <td className={`py-3 px-3 text-right font-mono text-xs font-bold ${profitDay >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(profitDay))}</td>
+                        <td className="py-3 px-3 text-right font-mono text-xs text-txt-muted">{formatExact(t.ordersMonthly)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-brand-300 bg-ev-light font-bold">
+                    <td className="py-3 px-4 text-xs text-accent">TOTAL / DAY</td>
+                    <td className="py-3 px-3 text-right font-mono text-sm text-txt-primary">{Math.round(targets.products.reduce((s,t)=>s+(t.ordersMonthly||0)/winDays,0))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-muted">blended ₹{formatExact(Math.round(targets.products.reduce((s,t)=>s+(t.ordersMonthly||0)*(t.cac||0),0)/Math.max(1,targets.products.reduce((s,t)=>s+(t.ordersMonthly||0),0))))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-sm text-txt-primary">₹{formatExact(Math.round(targets.products.reduce((s,t)=>s+((t.ordersMonthly||0)/winDays)*(t.cac||0),0)))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(Math.round(targets.products.reduce((s,t)=>s+((t.ordersMonthly||0)/winDays)*(t.cac||0)*GST,0)))}</td>
+                    <td className="py-3 px-3"></td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-primary">₹{formatExact(Math.round(targets.products.reduce((s,t)=>s+((t.ordersMonthly||0)/winDays)*(t.aov||0),0)))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-cash-green">₹{formatExact(Math.round(targets.totalProfit/winDays))}</td>
+                    <td className="py-3 px-3 text-right font-mono text-xs text-txt-muted">{formatExact(targets.products.reduce((s,t)=>s+(t.ordersMonthly||0),0))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="px-5 py-2.5 border-t border-brand-300/50">
+              <Tip>Orders/day = window target ÷ {winDays} days. Daily budget (pre-GST) = orders/day × CAC benchmark. Meta shows pre-GST spend, so use the pre-GST column when setting Meta budgets; the with-GST column is your actual cash outflow. Once the window starts, this page switches to live target-vs-actual tracking.</Tip>
+            </div>
+          </div>
         </div>
       )}
 
