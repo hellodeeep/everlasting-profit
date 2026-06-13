@@ -18,7 +18,7 @@ function Tip({ children }) {
 }
 
 // ============ TARGET EDITOR ============
-function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData }) {
+function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData, refRange, setRefRange }) {
   const [form, setForm] = useState(JSON.parse(JSON.stringify(rawTargets)))
 
   const updateProduct = (idx, field, value) => {
@@ -66,7 +66,11 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
     // Don't override orders - that's the target
   }
 
-  const daysInMonth = getDaysInMonth(form.month)
+  const isWindow = !!(form.windowStart && form.windowEnd)
+  const daysInMonth = isWindow
+    ? Math.max(1, Math.round((new Date(form.windowEnd + 'T00:00:00') - new Date(form.windowStart + 'T00:00:00')) / 86400000) + 1)
+    : getDaysInMonth(form.month)
+  const periodLabel = isWindow ? `${form.windowStart} to ${form.windowEnd} (${daysInMonth} days)` : 'month'
   const existingNames = new Set(form.products.map(p => p.name))
   const availableProducts = dbProducts.filter(p => !existingNames.has(p.name) && p.name)
 
@@ -80,24 +84,67 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
         </div>
       </div>
 
-      <div className="mb-4">
-        <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">Target Month</label>
-        <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
+      <div className="mb-4 flex items-end gap-4 flex-wrap">
+        <div>
+          <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">Target Period</label>
+          <div className="flex gap-1 glass-card p-1 w-fit">
+            <button
+              onClick={() => setForm(prev => ({ ...prev, windowStart: null, windowEnd: null }))}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!isWindow ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent'}`}>
+              Whole month
+            </button>
+            <button
+              onClick={() => setForm(prev => {
+                if (prev.windowStart && prev.windowEnd) return prev
+                const mo = prev.month
+                const dim = getDaysInMonth(mo)
+                return { ...prev, windowStart: `${mo}-01`, windowEnd: `${mo}-${String(dim).padStart(2, '0')}` }
+              })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${isWindow ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent'}`}>
+              Custom date range
+            </button>
+          </div>
+        </div>
+
+        {!isWindow ? (
+          <div>
+            <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">Month</label>
+            <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">From</label>
+              <input type="date" value={form.windowStart} onChange={e => setForm(prev => ({ ...prev, windowStart: e.target.value }))} className="input-field !w-40 !py-1.5 !text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] text-txt-muted uppercase tracking-wider mb-1 block">To</label>
+              <input type="date" value={form.windowEnd} onChange={e => setForm(prev => ({ ...prev, windowEnd: e.target.value }))} className="input-field !w-40 !py-1.5 !text-sm" />
+            </div>
+            <p className="text-[11px] text-accent pb-2">{daysInMonth} days · numbers below are totals for this window</p>
+          </>
+        )}
       </div>
 
       {(() => {
         const anyRef = Object.values(referenceData)[0]
-        if (!anyRef) return null
         return (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-ev-light border border-brand-300/50 flex items-center justify-between flex-wrap gap-2">
-            <p className="text-[11px] text-accent">
-              <span className="font-semibold">Reference window:</span> {anyRef.rangeLabel} ({anyRef.daysWithData} days synced)
-              <span className="text-txt-muted"> — set Meta to this exact range to compare</span>
-            </p>
-            {anyRef.missingDates.length > 0 && (
-              <p className="text-[11px] text-yellow-600">
-                ⚠ {anyRef.missingDates.length} gap{anyRef.missingDates.length > 1 ? 's' : ''} inside the window — sync from Dashboard for a clean match
+          <div className="mb-4 px-3 py-2.5 rounded-lg bg-ev-light border border-brand-300/50">
+            <div className="flex items-center gap-3 flex-wrap mb-1.5">
+              <span className="text-[11px] font-semibold text-accent uppercase tracking-wider">Baseline reference</span>
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={refRange.start} onChange={e => setRefRange(r => ({ ...r, start: e.target.value }))} className="input-field !w-36 !py-1 !text-xs" />
+                <span className="text-txt-muted text-xs">to</span>
+                <input type="date" value={refRange.end} onChange={e => setRefRange(r => ({ ...r, end: e.target.value }))} className="input-field !w-36 !py-1 !text-xs" />
+              </div>
+            </div>
+            {anyRef ? (
+              <p className="text-[11px] text-accent">
+                Showing {anyRef.rangeLabel} ({anyRef.daysWithData} days synced) — the "Use actual" buttons and grey hints below pull from this window
+                {anyRef.missingDates.length > 0 && <span className="text-yellow-600"> · ⚠ {anyRef.missingDates.length} day{anyRef.missingDates.length > 1 ? 's' : ''} not synced</span>}
               </p>
+            ) : (
+              <p className="text-[11px] text-yellow-600">No synced data in this range. Fetch these dates from the Dashboard first.</p>
             )}
           </div>
         )
@@ -128,7 +175,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 {/* Monthly Orders */}
                 <div>
-                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Monthly Orders</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">{isWindow ? 'Window Orders' : 'Monthly Orders'}</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.ordersMonthly || ''} onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">{daily}/day</p>
                   {ref && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d synced: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total){ref.daysWithData < 30 ? ' ⚠' : ''}</p>}
@@ -167,7 +214,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
 
                 {/* Auto-calculated Profit */}
                 <div className="bg-ev-light rounded-lg p-3">
-                  <label className="text-[9px] text-txt-muted uppercase block mb-1">Est. Monthly Profit</label>
+                  <label className="text-[9px] text-txt-muted uppercase block mb-1">{isWindow ? 'Est. Window Profit' : 'Est. Monthly Profit'}</label>
                   <p className={`text-lg font-bold font-mono ${est.profitMonthly > 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(est.profitMonthly)}</p>
                   <p className="text-[9px] text-txt-muted mt-0.5">
                     {(est.profitPct * 100).toFixed(1)}% margin | ₹{Math.round(est.profitPerOrder)}/order
@@ -229,6 +276,14 @@ export default function Targets() {
 
   // Which month's targets we're working with (default: current month)
   const [activeMonth, setActiveMonth] = useState(getCurrentMonth())
+
+  // Reference baseline date range (defaults to last 30 days, user can pick exact dates)
+  const [refRange, setRefRange] = useState(() => {
+    const today = new Date()
+    const end = new Date(today); end.setDate(end.getDate() - 1)
+    const start = new Date(today); start.setDate(start.getDate() - 30)
+    return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] }
+  })
 
   // Load targets for the active month, with fallback chain:
   // 1. this month's saved targets
@@ -365,19 +420,18 @@ export default function Targets() {
   const neededSpendDay = daysRemaining > 0 ? Math.ceil((targets.products.reduce((s,t) => s+t.spendMonthly,0) - aSpend) / daysRemaining) : tSpendDaily
   const neededRevDay = daysRemaining > 0 ? Math.ceil((targets.totalRevenue - aRev) / daysRemaining) : Math.round(targets.totalRevenue / daysTotal)
 
-  // Build last 30 days reference data per product from dashboard cache
+  // Build reference data per product from dashboard cache, over the chosen date range
   const referenceData = useMemo(() => {
-    const today = new Date()
     const ref = {}
     let allOrders = [], allCampaigns = []
     let daysWithData = 0
     const syncedDates = []
     const missingDates = []
 
-    // True rolling 30-day window (yesterday back 30 days)
-    for (let i = 1; i <= 30; i++) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
+    // Iterate the explicit reference window (refRange.start..refRange.end inclusive)
+    const start = new Date(refRange.start + 'T00:00:00')
+    const end = new Date(refRange.end + 'T00:00:00')
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const ds = d.toISOString().split('T')[0]
       const data = getCachedData(ds, ds)
       if (!data?.orders) { missingDates.push(ds); continue }
@@ -424,7 +478,7 @@ export default function Targets() {
       }
     })
     return ref
-  }, [cache])
+  }, [cache, refRange])
 
   const [y, m] = month.split('-')
   const monthName = new Date(parseInt(y), parseInt(m) - 1).toLocaleString('en', { month: 'long', year: 'numeric' })
@@ -449,7 +503,7 @@ export default function Targets() {
       </div>
 
       {/* Target Editor */}
-      {editing && <TargetEditor rawTargets={rawTargets} onSave={saveTargets} onCancel={() => setEditing(false)} dbProducts={dbProducts} referenceData={referenceData} />}
+      {editing && <TargetEditor rawTargets={rawTargets} onSave={saveTargets} onCancel={() => setEditing(false)} dbProducts={dbProducts} referenceData={referenceData} refRange={refRange} setRefRange={setRefRange} />}
 
       {syncing && (
         <div className="glass-card p-3">

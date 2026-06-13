@@ -80,11 +80,27 @@ export function computeProduct(p, daysInMonth) {
   }
 }
 
+// Day count for a target config: explicit window if set, else calendar month
+export function targetDayCount(raw) {
+  if (raw.windowStart && raw.windowEnd) {
+    const s = new Date(raw.windowStart + 'T00:00:00')
+    const e = new Date(raw.windowEnd + 'T00:00:00')
+    return Math.max(1, Math.round((e - s) / 86400000) + 1)
+  }
+  return getDaysInMonth(raw.month)
+}
+
 export function buildTargets(raw) {
-  const daysInMonth = getDaysInMonth(raw.month)
-  const products = (raw.products || []).map(p => computeProduct(p, daysInMonth))
+  // When a custom window is set, typed numbers are window totals, so we treat
+  // the window's day count as the period. Otherwise it's the calendar month.
+  const periodDays = targetDayCount(raw)
+  const products = (raw.products || []).map(p => computeProduct(p, periodDays))
   return {
     month: raw.month,
+    windowStart: raw.windowStart || null,
+    windowEnd: raw.windowEnd || null,
+    periodDays,
+    isWindow: !!(raw.windowStart && raw.windowEnd),
     totalRevenue: products.reduce((s, p) => s + p.revenueMonthly, 0),
     totalProfit: products.reduce((s, p) => s + p.profitMonthly, 0),
     products,

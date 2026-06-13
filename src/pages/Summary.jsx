@@ -52,7 +52,6 @@ export default function Summary() {
   const daysTotal = getDaysInMonth(monthStr)
   const daysElapsed = getDaysElapsed(monthStr)
   const isClosed = daysElapsed >= daysTotal
-  const proRate = isClosed ? 1 : (daysElapsed > 0 ? daysElapsed / daysTotal : 1)
 
   const { rawTargets, targetsExplicit } = useMemo(() => {
     const exact = getCacheByKey(targetsKeyForMonth(monthStr))
@@ -71,13 +70,33 @@ export default function Summary() {
       targetsExplicit: false,
     }
   }, [getCacheByKey, cache, monthStr, ready])
-  const targets = useMemo(() => buildTargets({ ...rawTargets, month: monthStr }), [rawTargets, monthStr])
+  const targets = useMemo(() => buildTargets(rawTargets), [rawTargets])
+  const tWin = targets.isWindow ? { start: targets.windowStart, end: targets.windowEnd } : null
+  // Windowed targets are window totals (no pro-rating). Monthly targets pro-rate to days elapsed.
+  const proRate = tWin ? 1 : (isClosed ? 1 : (daysElapsed > 0 ? daysElapsed / daysTotal : 1))
 
   const { mtdPnl, hasData } = useMemo(() => {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
     let allOrders = [], allCampaigns = []
+
+    // If the target is a custom window, compare actuals over that exact window
+    if (tWin) {
+      const start = new Date(tWin.start + 'T00:00:00')
+      const end = new Date(tWin.end + 'T00:00:00')
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const ds = d.toISOString().split('T')[0]
+        const data = getCachedData(ds, ds)
+        if (!data?.orders) continue
+        allOrders.push(...data.orders)
+        allCampaigns.push(...(data.metaCampaigns || []))
+      }
+      if (allOrders.length === 0) return { mtdPnl: null, hasData: false }
+      const meta = allocateMetaSpend(allCampaigns, campaignMap)
+      return { mtdPnl: calculateFullPnL(allOrders, meta, vendorPriceMap), hasData: true }
+    }
+
     const dayCount = isClosed ? daysTotal : daysElapsed
     for (let i = 1; i <= dayCount; i++) {
       const ds = `${monthStr}-${String(i).padStart(2, '0')}`
@@ -98,7 +117,7 @@ export default function Summary() {
     if (allOrders.length === 0) return { mtdPnl: null, hasData: false }
     const meta = allocateMetaSpend(allCampaigns, campaignMap)
     return { mtdPnl: calculateFullPnL(allOrders, meta, vendorPriceMap), hasData: true }
-  }, [cache, monthStr, daysElapsed, daysTotal, isClosed, getCachedData])
+  }, [cache, monthStr, daysElapsed, daysTotal, isClosed, getCachedData, tWin?.start, tWin?.end])
 
   // Per-SKU rows merging target + actual
   const rows = useMemo(() => {
@@ -242,7 +261,7 @@ export default function Summary() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-accent">Monthly Summary</h2>
-          <p className="text-sm text-txt-muted mt-0.5">Target vs reality · {isClosed ? 'final' : `day ${daysElapsed} of ${daysTotal}, targets pro-rated`}{!targetsExplicit && hasData ? ' · targets inherited (none set for this month)' : ''}</p>
+          <p className="text-sm text-txt-muted mt-0.5">Target vs reality · {tWin ? `window ${tWin.start} to ${tWin.end}` : (isClosed ? 'final' : `day ${daysElapsed} of ${daysTotal}, targets pro-rated`)}{!targetsExplicit && hasData && !tWin ? ' · targets inherited (none set for this month)' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 glass-card px-1.5 py-1">
