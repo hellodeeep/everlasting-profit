@@ -18,11 +18,23 @@ CREATE TABLE IF NOT EXISTS profit_settings (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Shared data cache (keyed by date range, e.g. "2025-05-01_2025-05-31")
+-- This makes fetched data shared across ALL browsers and devices.
+CREATE TABLE IF NOT EXISTS profit_cache (
+  cache_key TEXT PRIMARY KEY,
+  data JSONB DEFAULT '{}'::jsonb,
+  fetched_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Open access policies (no auth for simplicity)
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profit_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profit_cache ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all on products" ON products FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on profit_settings" ON profit_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on profit_cache" ON profit_cache FOR ALL USING (true) WITH CHECK (true);
 
 -- Auto-update timestamps
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -37,4 +49,7 @@ CREATE TRIGGER products_updated_at BEFORE UPDATE ON products
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 CREATE TRIGGER profit_settings_updated_at BEFORE UPDATE ON profit_settings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER profit_cache_updated_at BEFORE UPDATE ON profit_cache
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();

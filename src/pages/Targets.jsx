@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X } from 'lucide-react'
-import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY } from '../lib/targets'
+import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY, targetsKeyForMonth } from '../lib/targets'
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
@@ -85,6 +85,24 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
         <input type="month" value={form.month} onChange={e => setForm(prev => ({ ...prev, month: e.target.value }))} className="input-field !w-48 !py-1.5 !text-sm" />
       </div>
 
+      {(() => {
+        const anyRef = Object.values(referenceData)[0]
+        if (!anyRef) return null
+        return (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-ev-light border border-brand-300/50 flex items-center justify-between flex-wrap gap-2">
+            <p className="text-[11px] text-accent">
+              <span className="font-semibold">Reference window:</span> {anyRef.rangeLabel} ({anyRef.daysWithData} days synced)
+              <span className="text-txt-muted"> — set Meta to this exact range to compare</span>
+            </p>
+            {anyRef.missingDates.length > 0 && (
+              <p className="text-[11px] text-yellow-600">
+                ⚠ {anyRef.missingDates.length} gap{anyRef.missingDates.length > 1 ? 's' : ''} inside the window — sync from Dashboard for a clean match
+              </p>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Products */}
       <div className="space-y-4">
         {form.products.map((p, idx) => {
@@ -113,7 +131,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Monthly Orders</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.ordersMonthly || ''} onChange={e => updateProduct(idx, 'ordersMonthly', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">{daily}/day</p>
-                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total)</p>}
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d synced: {Math.round(ref.ordersPerDay)}/day ({formatExact(ref.totalOrders)} total){ref.daysWithData < 30 ? ' ⚠' : ''}</p>}
                 </div>
 
                 {/* Target CAC */}
@@ -121,7 +139,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Target CAC (pre-GST)</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.cac || ''} onChange={e => updateProduct(idx, 'cac', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">Spend: ₹{formatExact(spend)}/day</p>
-                  {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>Last 30d: ₹{Math.round(ref.cac)}</p>}
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.cac <= (p.cac || 999) ? 'text-cash-green' : 'text-cash-red'}`}>{ref.daysWithData}d: ₹{Math.round(ref.cac)}</p>}
                 </div>
 
                 {/* Target AOV */}
@@ -129,7 +147,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Target AOV</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.aov || ''} onChange={e => updateProduct(idx, 'aov', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">Rev: ₹{formatExact((p.ordersMonthly||0) * (p.aov||0))}/mo</p>
-                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-600'}`}>Last 30d: ₹{Math.round(ref.aov)}</p>}
+                  {ref && <p className={`text-[9px] mt-0.5 ${ref.aov >= (p.aov || 0) * 0.9 ? 'text-cash-green' : 'text-yellow-600'}`}>{ref.daysWithData}d: ₹{Math.round(ref.aov)}</p>}
                 </div>
 
                 {/* Vendor Price */}
@@ -144,7 +162,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <label className="text-[9px] text-txt-muted uppercase block mb-1">Prepaid %</label>
                   <input className="input-field !py-1.5 !text-sm font-mono text-right" type="number" value={p.prepaidRate || ''} onChange={e => updateProduct(idx, 'prepaidRate', parseInt(e.target.value) || 0)} />
                   <p className="text-[9px] text-txt-muted mt-0.5">C2P: {p.c2pRate || 10}% | COD: {100 - (p.prepaidRate||75) - (p.c2pRate||10)}%</p>
-                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
+                  {ref && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d: {Math.round(ref.prepaidRate*100)}% prepaid</p>}
                 </div>
 
                 {/* Auto-calculated Profit */}
@@ -154,7 +172,7 @@ function TargetEditor({ rawTargets, onSave, onCancel, dbProducts, referenceData 
                   <p className="text-[9px] text-txt-muted mt-0.5">
                     {(est.profitPct * 100).toFixed(1)}% margin | ₹{Math.round(est.profitPerOrder)}/order
                   </p>
-                  {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">Last 30d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
+                  {ref && ref.profitPerDay > 0 && <p className="text-[9px] text-yellow-600 mt-0.5">{ref.daysWithData}d: ₹{formatExact(Math.round(ref.profitPerDay * daysInMonth))}/mo</p>}
                 </div>
               </div>
             </div>
@@ -209,18 +227,46 @@ export default function Targets() {
   const [showDaily, setShowDaily] = useState(false)
   const [editing, setEditing] = useState(false)
 
-  // Load targets from cache or use defaults
+  // Which month's targets we're working with (default: current month)
+  const [activeMonth, setActiveMonth] = useState(getCurrentMonth())
+
+  // Load targets for the active month, with fallback chain:
+  // 1. this month's saved targets
+  // 2. most recent prior month's saved targets (as a template)
+  // 3. legacy single-slot targets (one-time migration)
+  // 4. defaults
   const rawTargets = useMemo(() => {
-    const saved = getCacheByKey(TARGETS_CACHE_KEY)
-    return saved?.data || DEFAULT_RAW_TARGETS
-  }, [getCacheByKey, ready])
+    // 1. exact month
+    const exact = getCacheByKey(targetsKeyForMonth(activeMonth))
+    if (exact?.data) return { ...exact.data, month: activeMonth }
+
+    // 2. most recent prior month
+    let best = null, bestMonth = ''
+    for (const key of Object.keys(cache)) {
+      if (key.startsWith('targets_config_')) {
+        const mo = key.replace('targets_config_', '')
+        if (mo < activeMonth && mo > bestMonth) { bestMonth = mo; best = cache[key] }
+      }
+    }
+    if (best?.data) return { ...best.data, month: activeMonth }
+
+    // 3. legacy single slot
+    const legacy = getCacheByKey(TARGETS_CACHE_KEY)
+    if (legacy?.data) return { ...legacy.data, month: activeMonth }
+
+    // 4. defaults
+    return { ...DEFAULT_RAW_TARGETS, month: activeMonth }
+  }, [getCacheByKey, cache, activeMonth, ready])
 
   const targets = useMemo(() => buildTargets(rawTargets), [rawTargets])
 
   const saveTargets = useCallback((newRaw) => {
-    setCacheByKey(TARGETS_CACHE_KEY, { data: newRaw })
+    // Save under the month chosen inside the editor form
+    const mo = newRaw.month || activeMonth
+    setCacheByKey(targetsKeyForMonth(mo), { data: newRaw })
+    setActiveMonth(mo)
     setEditing(false)
-  }, [setCacheByKey])
+  }, [setCacheByKey, activeMonth])
 
   const dbProducts = useMemo(() => getProducts(), [])
 
@@ -319,25 +365,38 @@ export default function Targets() {
   const neededSpendDay = daysRemaining > 0 ? Math.ceil((targets.products.reduce((s,t) => s+t.spendMonthly,0) - aSpend) / daysRemaining) : tSpendDaily
   const neededRevDay = daysRemaining > 0 ? Math.ceil((targets.totalRevenue - aRev) / daysRemaining) : Math.round(targets.totalRevenue / daysTotal)
 
-  // Build last 7 days reference data per product from dashboard cache
+  // Build last 30 days reference data per product from dashboard cache
   const referenceData = useMemo(() => {
     const today = new Date()
     const ref = {}
     let allOrders = [], allCampaigns = []
     let daysWithData = 0
+    const syncedDates = []
+    const missingDates = []
 
-    for (let i = 1; i <= 7; i++) {
+    // True rolling 30-day window (yesterday back 30 days)
+    for (let i = 1; i <= 30; i++) {
       const d = new Date(today)
       d.setDate(d.getDate() - i)
       const ds = d.toISOString().split('T')[0]
       const data = getCachedData(ds, ds)
-      if (!data?.orders) continue
+      if (!data?.orders) { missingDates.push(ds); continue }
       daysWithData++
+      syncedDates.push(ds)
       allOrders.push(...data.orders)
       allCampaigns.push(...(data.metaCampaigns || []))
     }
 
     if (allOrders.length === 0 || daysWithData === 0) return ref
+
+    syncedDates.sort()
+    const rangeStart = syncedDates[0]
+    const rangeEnd = syncedDates[syncedDates.length - 1]
+    const fmt = (ds) => {
+      const [y, m, dd] = ds.split('-')
+      return `${dd} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m) - 1]}`
+    }
+    const rangeLabel = `${fmt(rangeStart)} - ${fmt(rangeEnd)}`
 
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
@@ -360,6 +419,8 @@ export default function Targets() {
         profitPerDay: (prod.profit || 0) / daysWithData,
         margin: prod.margin || 0,
         daysWithData,
+        rangeStart, rangeEnd, rangeLabel,
+        missingDates: missingDates.filter(d => d >= rangeStart && d <= rangeEnd),
       }
     })
     return ref

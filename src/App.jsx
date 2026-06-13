@@ -1,11 +1,12 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { BarChart, Database, Settings, Zap, Target, Activity, LogOut } from 'lucide-react'
+import { BarChart, Database, Settings, Zap, Target, Activity, LogOut, FileBarChart } from 'lucide-react'
 import { DataProvider } from './lib/dataStore'
 import { AuthProvider, useAuth } from './lib/auth'
 import Dashboard from './pages/Dashboard'
 import Products from './pages/Products'
 import Targets from './pages/Targets'
+import Summary from './pages/Summary'
 import MetaAds from './pages/MetaAds'
 import SettingsPage from './pages/Settings'
 import Login from './pages/Login'
@@ -13,6 +14,7 @@ import Login from './pages/Login'
 const NAV_ITEMS = [
   { to: '/', icon: BarChart, label: 'Dashboard', end: true },
   { to: '/targets', icon: Target, label: 'Targets' },
+  { to: '/summary', icon: FileBarChart, label: 'Summary' },
   { to: '/meta', icon: Activity, label: 'Meta Ads' },
   { to: '/products', icon: Database, label: 'Products' },
   { to: '/settings', icon: Settings, label: 'Settings' },
@@ -121,6 +123,7 @@ function AuthenticatedApp() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/targets" element={<Targets />} />
+            <Route path="/summary" element={<Summary />} />
             <Route path="/meta" element={<MetaAds />} />
             <Route path="/products" element={<Products />} />
             <Route path="/settings" element={<SettingsPage />} />

@@ -24,6 +24,36 @@ function shiftDate(dateStr, days) {
   return d.toISOString().split('T')[0]
 }
 
+// ---- Monthly tabs ----
+const MONTH_START = { year: 2025, month: 4 } // month is 0-indexed, so 4 = May 2025
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function pad(n) { return String(n).padStart(2, '0') }
+
+// Build list of months from MONTH_START through the current month, newest first
+function buildMonths() {
+  const out = []
+  const now = new Date()
+  let y = MONTH_START.year
+  let m = MONTH_START.month
+  while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
+    const since = `${y}-${pad(m + 1)}-01`
+    const lastDay = new Date(y, m + 1, 0).getDate()
+    const until = `${y}-${pad(m + 1)}-${pad(lastDay)}`
+    const isCurrent = y === now.getFullYear() && m === now.getMonth()
+    out.push({
+      key: `m_${y}_${m}`,
+      label: `${MONTH_NAMES[m]} ${String(y).slice(2)}`,
+      since,
+      until,
+      isCurrent,
+    })
+    m++
+    if (m > 11) { m = 0; y++ }
+  }
+  return out.reverse() // newest first
+}
+
 function Stat({ label, value, sub, color = 'text-txt-primary' }) {
   return (
     <div className="glass-card glass-card-hover p-4 fade-in">
@@ -96,21 +126,33 @@ function exportCSV(pnl, dateLabel) {
 }
 
 export default function Dashboard() {
-  const { getCachedData, setCachedData, ready } = useDataStore()
+  const { getCachedData, getAssembledRange, setCachedData, ready, syncing } = useDataStore()
   const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
+  const [selectedMonth, setSelectedMonth] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [productFilter, setProductFilter] = useState(null)
   const [showPnL, setShowPnL] = useState(false)
   const [showVariants, setShowVariants] = useState(true)
+  const [monthProgress, setMonthProgress] = useState(null)
 
-  const dateRange = preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
+  const months = useMemo(() => buildMonths(), [])
+
+  const dateRange = preset === 'month' && selectedMonth
+    ? { since: selectedMonth.since, until: selectedMonth.until }
+    : preset === 'custom' ? customRange : (getDateRange(preset) || customRange)
   const dateLabel = dateRange.since === dateRange.until ? dateRange.since : `${dateRange.since} to ${dateRange.until}`
   const cacheKey = `${dateRange.since}_${dateRange.until}`
 
-  // Get cached data for current date range
-  const rawData = dateRange.since ? getCachedData(dateRange.since, dateRange.until) : null
+  // Get cached data for current date range.
+  // For a selected month, assemble from individual daily entries (small, reliable rows)
+  // instead of one oversized month blob.
+  const rawData = dateRange.since
+    ? (preset === 'month'
+        ? getAssembledRange(dateRange.since, dateRange.until)
+        : getCachedData(dateRange.since, dateRange.until))
+    : null
   const lastFetch = rawData?.fetchedAt ? new Date(rawData.fetchedAt) : null
   const isCached = !!rawData
 
@@ -139,6 +181,49 @@ export default function Dashboard() {
     setLoading(true)
     setError(null)
     setProductFilter(null)
+
+    // Month preset: fetch day-by-day into small per-day cache entries.
+    // Skip past days already cached (they never change). Always refetch today.
+    if (preset === 'month') {
+      try {
+        const start = new Date(dateRange.since + 'T00:00:00')
+        const end = new Date(dateRange.until + 'T00:00:00')
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const days = []
+        for (let d = new Date(start); d <= end && d <= today; d.setDate(d.getDate() + 1)) {
+          days.push(d.toISOString().split('T')[0])
+        }
+        let done = 0
+        for (const ds of days) {
+          const isToday = ds === today.toISOString().split('T')[0]
+          const existing = getCachedData(ds, ds)
+          if (existing?.orders && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); continue }
+          setMonthProgress({ done, total: days.length, day: ds })
+          const [sr, mr] = await Promise.allSettled([
+            fetchShopifyOrders(ds, ds),
+            fetchMetaSpend(ds, ds),
+          ])
+          if (sr.status === 'rejected') throw new Error(`${ds}: ${sr.reason?.message || 'Shopify fetch failed'}`)
+          const shopify = sr.value
+          let metaCampaigns = [], metaRawSpend = 0
+          if (mr.status === 'fulfilled' && mr.value) {
+            metaCampaigns = mr.value.campaigns || []
+            metaRawSpend = mr.value.summary?.totalSpend || 0
+          }
+          setCachedData(ds, ds, { orders: shopify.orders, metaCampaigns, metaRawSpend, apiMeta: shopify.meta })
+          done++
+          setMonthProgress({ done, total: days.length, day: ds })
+        }
+        setMonthProgress(null)
+      } catch (err) {
+        setError(err.message)
+        setMonthProgress(null)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     try {
       // Fetch Shopify and Meta in parallel for speed
       const [shopifyResult, metaResult] = await Promise.allSettled([
@@ -167,7 +252,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [dateRange.since, dateRange.until, setCachedData])
+  }, [dateRange.since, dateRange.until, preset, setCachedData, getCachedData])
 
   // Auto-fetch if no cache exists for this range (only on preset change, not custom)
   useEffect(() => {
@@ -221,8 +306,35 @@ export default function Dashboard() {
           </button>}
           <button onClick={fetchData} disabled={loading || !dateRange.since} className="btn-primary flex items-center gap-2">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Fetching...' : isCached ? 'Refresh' : 'Fetch Data'}
+            {loading
+              ? (monthProgress ? `Day ${monthProgress.done}/${monthProgress.total}...` : 'Fetching...')
+              : isCached ? 'Refresh' : 'Fetch Data'}
           </button>
+        </div>
+      </div>
+
+      {/* Monthly tabs */}
+      <div className="glass-card p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Calendar size={14} className="text-txt-muted" />
+          <span className="text-xs font-semibold text-accent uppercase tracking-wider">Monthly</span>
+          {syncing && <span className="flex items-center gap-1 text-[10px] text-txt-muted"><RefreshCw size={9} className="animate-spin" /> syncing shared cache</span>}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {months.map(mo => {
+            const asm = getAssembledRange(mo.since, mo.until)
+            const hasCached = !!asm
+            const fullyCached = asm && asm._missingDays === 0
+            const isActive = preset === 'month' && selectedMonth?.key === mo.key
+            return (
+              <button key={mo.key}
+                onClick={() => { setPreset('month'); setSelectedMonth(mo); setProductFilter(null) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${isActive ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
+                {mo.label}{mo.isCurrent ? ' •' : ''}
+                {hasCached && !isActive && <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${fullyCached ? 'bg-cash-green' : 'bg-yellow-500'}`} />}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -238,7 +350,7 @@ export default function Dashboard() {
           const range = pr.key !== 'custom' ? getDateRange(pr.key) : null
           const hasCached = range ? !!getCachedData(range.since, range.until) : false
           return (
-            <button key={pr.key} onClick={() => { setPreset(pr.key); setProductFilter(null) }}
+            <button key={pr.key} onClick={() => { setPreset(pr.key); setSelectedMonth(null); setProductFilter(null) }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${preset === pr.key ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
               {pr.label}
               {hasCached && preset !== pr.key && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cash-green" />}

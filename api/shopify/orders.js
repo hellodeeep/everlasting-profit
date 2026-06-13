@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     let url = `https://${creds.store}.myshopify.com/admin/api/2024-10/orders.json?status=any&limit=${limit}&created_at_min=${encodeURIComponent(sinceISO)}&created_at_max=${encodeURIComponent(untilISO)}&order=created_at+asc`;
 
     let pages = 0;
-    while (url && pages < 50) {
+    while (url && pages < 500) {
       pages++;
       const response = await fetch(url, {
         headers: { 'X-Shopify-Access-Token': creds.token, 'Content-Type': 'application/json' },

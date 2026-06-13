@@ -87,3 +87,43 @@ export async function saveSettings(settings) {
   setLocal({ ...local, settings })
   return settings
 }
+
+// ---- Shared data cache (keyed by date range) ----
+// Lives in Supabase so the same cache is available across all browsers/devices.
+
+// Pull every cached range at once (used on app load)
+export async function getAllCache() {
+  if (supabase) {
+    const { data, error } = await supabase.from('profit_cache').select('*')
+    if (error) throw error
+    const result = {}
+    ;(data || []).forEach(row => {
+      result[row.cache_key] = { ...row.data, fetchedAt: row.fetched_at ? new Date(row.fetched_at).getTime() : Date.now() }
+    })
+    return result
+  }
+  try {
+    return JSON.parse(localStorage.getItem('everlasting_profit_cache') || '{}')
+  } catch { return {} }
+}
+
+// Write/overwrite one cached range
+export async function setCacheEntry(key, data) {
+  const entry = { ...data, fetchedAt: Date.now() }
+  if (supabase) {
+    const { fetchedAt, ...payload } = entry
+    const { error } = await supabase.from('profit_cache').upsert({
+      cache_key: key,
+      data: payload,
+      fetched_at: new Date().toISOString(),
+    }, { onConflict: 'cache_key' })
+    if (error) throw error
+    return entry
+  }
+  try {
+    const all = JSON.parse(localStorage.getItem('everlasting_profit_cache') || '{}')
+    all[key] = entry
+    localStorage.setItem('everlasting_profit_cache', JSON.stringify(all))
+  } catch (e) { console.warn('Local cache save failed:', e) }
+  return entry
+}
