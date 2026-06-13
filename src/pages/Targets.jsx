@@ -273,6 +273,7 @@ export default function Targets() {
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, day: '' })
   const [showDaily, setShowDaily] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [selectedTab, setSelectedTab] = useState('overview')
 
   // Which month's targets we're working with (default: current month)
   const [activeMonth, setActiveMonth] = useState(getCurrentMonth())
@@ -326,25 +327,62 @@ export default function Targets() {
   const dbProducts = useMemo(() => getProducts(), [])
 
   const month = targets.month
-  const daysTotal = getDaysInMonth(month)
-  const daysElapsed = getDaysElapsed(month)
-  const daysRemaining = daysTotal - daysElapsed
-  const timePct = daysElapsed / daysTotal * 100
+  const GST = 1.18
+
+  // Effective window: explicit target window, else the whole calendar month
+  const todayStr = new Date().toISOString().split('T')[0]
+  const isWindow = targets.isWindow
+  const winStart = isWindow ? targets.windowStart : `${month}-01`
+  const winEnd = isWindow ? targets.windowEnd : `${month}-${String(getDaysInMonth(month)).padStart(2, '0')}`
+
+  const winDays = (() => {
+    const s = new Date(winStart + 'T00:00:00'), e = new Date(winEnd + 'T00:00:00')
+    return Math.max(1, Math.round((e - s) / 86400000) + 1)
+  })()
+  // Days of the window that have already happened (start..min(today,end))
+  const winElapsed = (() => {
+    const s = new Date(winStart + 'T00:00:00')
+    const today = new Date(todayStr + 'T00:00:00')
+    const e = new Date(winEnd + 'T00:00:00')
+    const last = today < e ? today : e
+    if (last < s) return 0
+    return Math.round((last - s) / 86400000) + 1
+  })()
+  const winRemaining = Math.max(0, winDays - winElapsed)
+  const winStarted = winElapsed > 0
+  const timePct = Math.min(100, winElapsed / winDays * 100)
+
+  // Build list of window dates that have happened
+  const windowDates = (() => {
+    const out = []
+    const s = new Date(winStart + 'T00:00:00')
+    const today = new Date(todayStr + 'T00:00:00')
+    const e = new Date(winEnd + 'T00:00:00')
+    const last = today < e ? today : e
+    for (let d = new Date(s); d <= last; d.setDate(d.getDate() + 1)) out.push(d.toISOString().split('T')[0])
+    return out
+  })()
+
+  const fmtD = (ds) => new Date(ds + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  const winLabel = `${fmtD(winStart)} - ${fmtD(winEnd)}`
+
+  // legacy aliases used by older code paths below
+  const daysTotal = winDays
+  const daysElapsed = winElapsed
+  const daysRemaining = winRemaining
 
   const cachedDays = useMemo(() => {
     let count = 0
-    for (let i = 1; i <= daysElapsed; i++) {
-      if (getCachedData(`${month}-${String(i).padStart(2, '0')}`, `${month}-${String(i).padStart(2, '0')}`)) count++
+    for (const ds of windowDates) {
+      if (getCachedData(ds, ds)) count++
     }
     return count
-  }, [cache, month, daysElapsed])
+  }, [cache, windowDates])
 
   const syncMTD = useCallback(async () => {
     setSyncing(true)
-    const today = new Date().toISOString().split('T')[0]
-    const days = []
-    for (let i = 1; i <= daysElapsed; i++) days.push(`${month}-${String(i).padStart(2, '0')}`)
-    const toFetch = days.filter(ds => ds === today || !getCachedData(ds, ds))
+    const today = todayStr
+    const toFetch = windowDates.filter(ds => ds === today || !getCachedData(ds, ds))
     setSyncProgress({ current: 0, total: toFetch.length, day: '' })
     for (let i = 0; i < toFetch.length; i++) {
       const ds = toFetch[i]
@@ -360,7 +398,7 @@ export default function Targets() {
       } catch (e) { console.warn(`Failed ${ds}:`, e) }
     }
     setSyncing(false)
-  }, [month, daysElapsed, getCachedData, setCachedData])
+  }, [windowDates, todayStr, getCachedData, setCachedData])
 
   // Build daily + MTD data
   const { dailyRows, mtdPnl } = useMemo(() => {
@@ -370,18 +408,17 @@ export default function Targets() {
     const rows = []
     let allOrders = [], allCampaigns = []
 
-    for (let i = 1; i <= daysElapsed; i++) {
-      const ds = `${month}-${String(i).padStart(2, '0')}`
+    windowDates.forEach((ds, idx) => {
       const data = getCachedData(ds, ds)
-      if (!data) { rows.push({ date: ds, day: i, empty: true }); continue }
+      if (!data) { rows.push({ date: ds, day: idx + 1, empty: true }); return }
       const meta = allocateMetaSpend(data.metaCampaigns || [], campaignMap)
       const pnl = calculateFullPnL(data.orders || [], meta, vendorPriceMap)
-      rows.push({ date: ds, day: i, orders: pnl.overview.activeOrders, prepaid: pnl.overview.prepaidOrders,
+      rows.push({ date: ds, day: idx + 1, orders: pnl.overview.activeOrders, prepaid: pnl.overview.prepaidOrders,
         revenue: pnl.revenue.expectedRevenue, metaSpend: pnl.expenses.metaAds, profit: pnl.profit.expected,
         margin: pnl.profit.margin, aov: pnl.metrics.aov, cpp: pnl.metrics.cpp, products: pnl.products })
       allOrders.push(...(data.orders || []))
       allCampaigns.push(...(data.metaCampaigns || []))
-    }
+    })
 
     let mtdPnl = null
     if (allOrders.length > 0) {
@@ -389,13 +426,12 @@ export default function Targets() {
       mtdPnl = calculateFullPnL(allOrders, mtdMeta, vendorPriceMap)
     }
     return { dailyRows: rows, mtdPnl }
-  }, [cache, month, daysElapsed])
+  }, [cache, windowDates])
 
   const p = mtdPnl
   const hasFetched = dailyRows.some(r => !r.empty)
 
   // Targets
-  const GST = 1.18
   const tOrdDaily = targets.products.reduce((s, t) => s + t.ordersDaily, 0)
   const tOrdMTD = Math.round(tOrdDaily * daysElapsed)
   const tSpendDaily = targets.products.reduce((s, t) => s + t.spendDaily, 0)
@@ -483,21 +519,87 @@ export default function Targets() {
   const [y, m] = month.split('-')
   const monthName = new Date(parseInt(y), parseInt(m) - 1).toLocaleString('en', { month: 'long', year: 'numeric' })
 
+
+  const winLabelLong = isWindow
+    ? `${new Date(winStart+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})} to ${new Date(winEnd+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`
+    : new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1])-1).toLocaleString('en',{month:'long',year:'numeric'})
+
+  // Per-product window stats helper
+  const productStats = (t) => {
+    const actual = p?.products.find(pr => pr.name === t.name)
+    const aO = actual?.totalUnits || 0
+    const aM = (actual?.metaSpend || 0) / GST
+    const aR = actual?.revenue || 0
+    const aP = actual?.profit || 0
+    const aCAC = aO > 0 ? aM / aO : 0
+    const aAOV = aO > 0 ? aR / aO : 0
+    const aPPO = aO > 0 ? aP / aO : 0
+    const aMargin = aR > 0 ? aP / aR : 0
+    // target totals for the window (typed numbers ARE window totals)
+    const tO = t.ordersMonthly || 0
+    const tProfit = t.profitMonthly || 0
+    const tRev = tO * (t.aov || 0)
+    const tSpend = tO * (t.cac || 0)
+    // pace: how far through the window are we, vs how far through the order goal
+    const expectedByNow = winDays > 0 ? tO * (winElapsed / winDays) : 0
+    const pacePct = expectedByNow > 0 ? aO / expectedByNow * 100 : 0
+    const ordPct = tO > 0 ? aO / tO * 100 : 0
+    const profitPct = tProfit > 0 ? aP / tProfit * 100 : 0
+    const avgDaily = winElapsed > 0 ? aO / winElapsed : 0
+    const needDaily = winRemaining > 0 ? Math.ceil((tO - aO) / winRemaining) : 0
+    const needSpendDaily = needDaily * (aCAC > 0 ? aCAC : t.cac)
+    const prepaidPct = actual?.prepaidPct || 0, c2pPct = actual?.c2pPct || 0, codPct = actual?.codPct || 0
+    const aovPrepaid = actual?.aovPrepaid || 0, aovC2p = actual?.aovC2p || 0, aovCod = actual?.aovCod || 0
+    return { actual, aO, aM, aR, aP, aCAC, aAOV, aPPO, aMargin, tO, tProfit, tRev, tSpend,
+      expectedByNow, pacePct, ordPct, profitPct, avgDaily, needDaily, needSpendDaily,
+      prepaidPct, c2pPct, codPct, aovPrepaid, aovC2p, aovCod }
+  }
+
+  // Window totals across all products (for overview)
+  const overall = (() => {
+    const tO = targets.products.reduce((s,t)=>s+(t.ordersMonthly||0),0)
+    const tProfit = targets.products.reduce((s,t)=>s+(t.profitMonthly||0),0)
+    const tRev = targets.totalRevenue
+    const aO = p?.overview.activeOrders || 0
+    const aR = p?.revenue.expectedRevenue || 0
+    const aP = p?.profit.expected || 0
+    const aM = (p?.expenses.metaAds || 0) / GST
+    const aCAC = aO > 0 ? aM / aO : 0
+    const aAOV = aO > 0 ? aR / aO : 0
+    const aMargin = aR > 0 ? aP / aR : 0
+    const expectedByNow = winDays > 0 ? tO * (winElapsed / winDays) : 0
+    const pacePct = expectedByNow > 0 ? aO / expectedByNow * 100 : 0
+    return { tO, tProfit, tRev, aO, aR, aP, aM, aCAC, aAOV, aMargin, expectedByNow, pacePct }
+  })()
+
+  const StatBox = ({ label, actual, target, good, sub }) => (
+    <div className="glass-card p-4">
+      <p className="metric-label mb-1">{label}</p>
+      <p className={`text-xl font-bold font-mono ${good === undefined ? 'text-txt-primary' : good ? 'text-cash-green' : 'text-cash-red'}`}>{actual}</p>
+      {target !== undefined && <p className="text-[11px] text-txt-muted mt-0.5">target {target}</p>}
+      {sub && <p className="text-[11px] text-txt-muted mt-0.5">{sub}</p>}
+    </div>
+  )
+
   return (
     <div className="space-y-5 fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-accent">Target vs Reality</h2>
-          <p className="text-sm text-txt-muted mt-1">{monthName} | Day {daysElapsed}/{daysTotal} | {cachedDays}/{daysElapsed} days synced</p>
+          <p className="text-sm text-txt-muted mt-1">
+            <span className="font-semibold text-accent">{winLabelLong}</span>
+            {isWindow && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-ev-light text-accent">custom window</span>}
+            {' · '}{winStarted ? `day ${winElapsed} of ${winDays}` : 'not started yet'}{' · '}{cachedDays}/{windowDates.length} synced
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setEditing(!editing)} className={`btn-ghost text-sm flex items-center gap-1.5 ${editing ? 'text-yellow-600' : ''}`}>
             <Settings size={14} /> {editing ? 'Editing...' : 'Edit Targets'}
           </button>
-          <button onClick={syncMTD} disabled={syncing} className="btn-primary flex items-center gap-2">
+          <button onClick={syncMTD} disabled={syncing || windowDates.length === 0} className="btn-primary flex items-center gap-2">
             <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? `Day ${syncProgress.current}/${syncProgress.total}` : cachedDays < daysElapsed ? `Sync ${daysElapsed - cachedDays} Missing Days` : 'Refresh Today'}
+            {syncing ? `Day ${syncProgress.current}/${syncProgress.total}` : cachedDays < windowDates.length ? `Sync ${windowDates.length - cachedDays} Days` : 'Refresh Today'}
           </button>
         </div>
       </div>
@@ -515,201 +617,181 @@ export default function Targets() {
         </div>
       )}
 
-      {/* Month Progress */}
+      {/* Window progress */}
       <div className="glass-card p-4">
         <div className="flex justify-between mb-2">
-          <span className="text-xs text-txt-muted flex items-center gap-1"><Calendar size={12} /> Month Progress</span>
-          <span className="text-xs font-mono text-txt-primary">{timePct.toFixed(0)}% done | {daysRemaining} days left</span>
+          <span className="text-xs text-txt-muted flex items-center gap-1"><Calendar size={12} /> Window Progress</span>
+          <span className="text-xs font-mono text-txt-primary">{timePct.toFixed(0)}% of window · {winRemaining} days left</span>
         </div>
         <Bar pct={timePct} color="bg-brand-500" h="h-3" />
       </div>
 
       {!ready && <div className="glass-card p-8 text-center"><RefreshCw size={24} className="text-txt-muted mx-auto mb-3 animate-spin" /><p className="text-sm text-txt-muted">Loading cached data...</p></div>}
 
-      {ready && !hasFetched && !syncing && (
+      {ready && !winStarted && (
         <div className="glass-card p-10 text-center">
-          <Target size={48} className="text-txt-muted mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-accent mb-2">Sync your data first</h3>
-          <p className="text-sm text-txt-muted">Click "Sync Missing Days" above. Each day takes ~2 seconds.</p>
+          <Calendar size={48} className="text-txt-muted mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-accent mb-2">Window hasn't started</h3>
+          <p className="text-sm text-txt-muted">This target runs {winLabelLong}. Tracking begins on the start date.</p>
         </div>
       )}
 
-      {p && (<>
-        {/* ============ ACTION SUMMARY ============ */}
-        {(() => {
-          const overallOnTrack = aOrd >= tOrdMTD * 0.9
-          const productActions = targets.products.map(t => {
-            const actual = p.products.find(pr => pr.name === t.name)
-            const aO = actual?.totalUnits || 0
-            const aR = actual?.revenue || 0
-            const aM = (actual?.metaSpend || 0) / GST
-            const aC = aO > 0 ? aM / aO : t.cac
-            const aA = aO > 0 ? aR / aO : 0
-            const tO = Math.round(t.ordersDaily * daysElapsed)
-            const pct = tO > 0 ? aO / tO : 0
-            const avgDaily = daysElapsed > 0 ? aO / daysElapsed : 0
-            const avgSpend = daysElapsed > 0 ? aM / daysElapsed : 0
-            const actualCAC = aO > 0 ? aM / aO : t.cac
-            const needOrders = daysRemaining > 0 ? Math.ceil((t.ordersMonthly - aO) / daysRemaining) : t.ordersDaily
-            const needSpend = needOrders * actualCAC
-            const onTrack = pct >= 0.9
-            const steps = []
-            if (onTrack) {
-              steps.push(`Maintain daily budget at ₹${formatExact(Math.round(avgSpend))}/day -- your CAC of ₹${formatExact(Math.round(actualCAC))} is delivering ${Math.round(avgDaily)} orders/day`)
-            } else {
-              steps.push(`Set daily budget to ₹${formatExact(Math.round(needSpend))} (${needOrders} orders × ₹${formatExact(Math.round(actualCAC))} CAC)`)
-            }
-            if (!onTrack) steps.push(`Get ${needOrders} orders tomorrow (averaging ${Math.round(avgDaily)}/day, target is ${t.ordersDaily}/day)`)
-            else steps.push(`Maintain ${t.ordersDaily} orders/day -- you're on pace`)
-            if (aC > t.cac && aC > 0) steps.push(`Bring CAC down from ₹${Math.round(aC)} to ₹${t.cac} -- pause ad sets with CAC above ₹${Math.round(t.cac * 1.2)}, duplicate winners`)
-            else if (aC > 0) steps.push(`CAC ₹${Math.round(aC)} is within target ₹${t.cac} -- keep running current winners`)
-            if (aA > 0 && aA < t.aov * 0.85) steps.push(`Lift AOV from ₹${Math.round(aA)} to ₹${t.aov} -- push Buy 2/3 bundles, Gift Box upsells`)
-            return { ...t, aO, tO, pct, onTrack, needOrders, needSpend, avgDaily, avgSpend, steps }
-          })
-          return (
-            <div className="glass-card p-5 border-l-4 border-l-accent">
-              <h3 className="text-base font-bold text-accent mb-1">Tomorrow's Game Plan</h3>
-              <p className="text-xs text-txt-muted mb-4">
-                {overallOnTrack ? `You're on track overall (${aOrd}/${tOrdMTD} orders by Day ${daysElapsed}). Stay consistent.` : `You're behind by ${formatExact(tOrdMTD - aOrd)} orders. Here's what each product needs:`}
-              </p>
-              <div className="space-y-4">
-                {productActions.map(pa => (
-                  <div key={pa.name} className={`p-4 rounded-xl ${pa.onTrack ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.onTrack ? '✓' : '✗'}</span>
-                        <h4 className="text-sm font-semibold text-accent">{pa.name}</h4>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{pa.code}</span>
-                      </div>
-                      <span className={`text-xs font-mono font-bold ${pa.onTrack ? 'text-cash-green' : 'text-cash-red'}`}>{pa.aO}/{pa.tO} ({(pa.pct*100).toFixed(0)}%)</span>
-                    </div>
-                    <div className="space-y-1.5 ml-6">
-                      {pa.steps.map((step, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span className="text-yellow-600 text-xs mt-0.5">{i+1}.</span>
-                          <p className="text-xs text-txt-muted leading-relaxed">{step}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-4 ml-6 mt-2 pt-2 border-t border-brand-300/50/15">
-                      <span className="text-[10px] text-txt-muted">Avg: {Math.round(pa.avgDaily)} orders/day</span>
-                      <span className="text-[10px] text-txt-muted">Spend: ₹{formatExact(pa.avgSpend)}/day</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 pt-3 border-t border-brand-300/50 flex flex-wrap gap-4">
-                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Total Budget</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(productActions.reduce((s,pa)=>s+pa.needSpend,0))}</p></div>
-                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Total Orders</p><p className="text-sm font-bold font-mono text-txt-primary">{productActions.reduce((s,pa)=>s+pa.needOrders,0)}/day</p></div>
-                <div className="text-center"><p className="text-[9px] text-txt-muted uppercase">Revenue Needed</p><p className="text-sm font-bold font-mono text-txt-primary">₹{formatExact(neededRevDay)}/day</p></div>
-              </div>
-            </div>
-          )
-        })()}
+      {ready && winStarted && !hasFetched && !syncing && (
+        <div className="glass-card p-10 text-center">
+          <Target size={48} className="text-txt-muted mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-accent mb-2">Sync your data first</h3>
+          <p className="text-sm text-txt-muted">Click "Sync Days" above to pull {windowDates.length} day{windowDates.length>1?'s':''} of this window.</p>
+        </div>
+      )}
 
-        {/* ============ PRODUCT TRACKER TABLE ============ */}
-        <div className="glass-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-brand-300/50"><h3 className="text-sm font-semibold text-accent">Product Tracker</h3></div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
-              <thead>
-                <tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
-                  <th className="py-2.5 px-3" rowSpan={2}>Product</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={5}>Orders / Day</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Meta Spend / Day (pre-GST)</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={3}>AOV (full order)</th>
-                  <th className="py-1.5 px-2 text-center border-b border-brand-300/50" colSpan={4}>Profit / Day</th>
-                </tr>
-                <tr className="border-b border-brand-300/50 text-[9px] text-txt-muted uppercase">
-                  <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th><th className="py-1.5 px-2 text-right">Need*</th>
-                  <th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">CAC</th><th className="py-1.5 px-2 text-right">Need*</th>
-                  <th className="py-1.5 px-2 text-right">Prepaid</th><th className="py-1.5 px-2 text-right">C2P</th><th className="py-1.5 px-2 text-right">COD</th>
-                  <th className="py-1.5 px-2 text-right">Monthly</th><th className="py-1.5 px-2 text-right">Target</th><th className="py-1.5 px-2 text-right">Avg</th><th className="py-1.5 px-2 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {targets.products.map(t => {
-                  const actual = p.products.find(pr => pr.name === t.name)
-                  const aO = actual?.totalUnits || 0
-                  const aM = (actual?.metaSpend || 0) / GST
-                  const aP = actual?.profit || 0
-                  const avgOrd = daysElapsed > 0 ? aO / daysElapsed : 0
-                  const avgSpd = daysElapsed > 0 ? aM / daysElapsed : 0
-                  const avgProfit = daysElapsed > 0 ? aP / daysElapsed : 0
-                  const actualCAC = aO > 0 ? aM / aO : t.cac
-                  const needOrd = daysRemaining > 0 ? Math.ceil((t.ordersMonthly - aO) / daysRemaining) : t.ordersDaily
-                  const needSpd = needOrd * actualCAC
-                  const ordOnTrack = avgOrd >= t.ordersDaily * 0.9
-                  const profitOnTrack = avgProfit >= t.profitDaily * 0.9
-                  const aPrepaidAOV = actual?.aovPrepaid || 0
-                  const aC2pAOV = actual?.aovC2p || 0
-                  const aCodAOV = actual?.aovCod || 0
-                  return (
-                    <tr key={t.name} className="border-b border-brand-300/50/50 hover:bg-ev-light">
-                      <td className="py-2.5 px-3"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{t.code}</span></div></td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{formatExact(t.ordersMonthly)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{t.ordersDaily}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${ordOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>{Math.round(avgOrd)}</td>
-                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ordOnTrack ? 'bg-green-50 text-cash-green' : 'bg-red-50 text-cash-red'}`}>{ordOnTrack ? 'On Track' : `Behind ${Math.round(t.ordersDaily - avgOrd)}`}</span></td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needOrd > t.ordersDaily * 1.3 ? 'text-cash-red' : needOrd > t.ordersDaily ? 'text-yellow-600' : 'text-cash-green'}`}>{needOrd <= 0 ? '-' : needOrd}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.spendDaily)}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${avgSpd > 0 ? 'text-txt-secondary' : 'text-txt-muted'}`}>₹{formatExact(Math.round(avgSpd))}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${actualCAC <= t.cac ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(actualCAC))}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${needSpd > t.spendDaily * 1.3 ? 'text-cash-red' : needSpd > t.spendDaily ? 'text-yellow-600' : 'text-cash-green'}`}>₹{formatExact(Math.round(needSpd))}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aPrepaidAOV >= t.aov * 0.9 ? 'text-cash-green' : aPrepaidAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aPrepaidAOV > 0 ? `₹${formatExact(aPrepaidAOV)}` : '--'}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aC2pAOV >= t.aov * 0.9 ? 'text-cash-green' : aC2pAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aC2pAOV > 0 ? `₹${formatExact(aC2pAOV)}` : '--'}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs ${aCodAOV >= t.aov * 0.9 ? 'text-cash-green' : aCodAOV > 0 ? 'text-yellow-600' : 'text-txt-muted'}`}>{aCodAOV > 0 ? `₹${formatExact(aCodAOV)}` : '--'}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitMonthly)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(t.profitDaily)}</td>
-                      <td className={`py-2.5 px-2 text-right font-mono text-xs font-bold ${profitOnTrack ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(Math.round(avgProfit))}</td>
-                      <td className="py-2.5 px-2 text-right"><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${profitOnTrack ? 'bg-green-50 text-cash-green' : 'bg-red-50 text-cash-red'}`}>{profitOnTrack ? 'On Track' : avgProfit > 0 ? `Short ₹${formatExact(Math.round(t.profitDaily - avgProfit))}` : 'Loss'}</span></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-2 border-t border-brand-300/50/50">
-            <Tip>Need/Day for orders = remaining orders / {daysRemaining} days. Need/Day for spend = orders needed × your actual CAC. Profit/Day shows daily average vs target.</Tip>
-          </div>
+      {p && winStarted && (<>
+        {/* Tabs */}
+        <div className="flex items-center gap-1.5 flex-wrap glass-card p-1.5">
+          <button onClick={() => setSelectedTab('overview')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedTab === 'overview' ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
+            Overview
+          </button>
+          {targets.products.map(t => {
+            const st = productStats(t)
+            const ok = st.pacePct >= 90
+            return (
+              <button key={t.code} onClick={() => setSelectedTab(t.code)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${selectedTab === t.code ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light'}`}>
+                {t.code}
+                <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-cash-green' : 'bg-cash-red'}`} />
+              </button>
+            )
+          })}
         </div>
 
-        {/* ============ DAILY BREAKDOWN ============ */}
-        <div className="glass-card overflow-hidden">
-          <button onClick={() => setShowDaily(!showDaily)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-ev-light">
-            <h3 className="text-sm font-semibold text-accent">Daily Breakdown</h3>
-            <ChevronDown size={16} className={`text-txt-muted transition-transform ${showDaily ? 'rotate-180' : ''}`} />
-          </button>
-          {showDaily && (
+        {/* OVERVIEW TAB */}
+        {selectedTab === 'overview' && (<>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatBox label="Orders" actual={formatExact(overall.aO)} target={formatExact(overall.tO)} good={overall.aO >= overall.expectedByNow * 0.9} sub={`pace ${overall.pacePct.toFixed(0)}% · need ${winRemaining>0?Math.ceil((overall.tO-overall.aO)/winRemaining):0}/day`} />
+            <StatBox label="Profit" actual={`₹${formatExact(overall.aP)}`} target={`₹${formatExact(overall.tProfit)}`} good={overall.tProfit>0 && overall.aP >= overall.tProfit*(winElapsed/winDays)*0.9} sub={`${overall.tProfit>0?Math.round(overall.aP/overall.tProfit*100):0}% of goal`} />
+            <StatBox label="Blended CAC" actual={`₹${formatExact(Math.round(overall.aCAC))}`} sub="pre-GST · match Meta to window dates" />
+            <StatBox label="Margin" actual={`${(overall.aMargin*100).toFixed(1)}%`} sub={`AOV ₹${formatExact(Math.round(overall.aAOV))}`} />
+          </div>
+
+          <div className="glass-card overflow-hidden">
+            <div className="px-5 py-3 border-b border-brand-300/50 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-accent">All products · window totals</h3>
+              <span className="text-[11px] text-txt-muted">{winLabel}</span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
-                  <th className="py-2 px-3">Date</th><th className="py-2 px-3 text-right">Orders</th><th className="py-2 px-3 text-right">Revenue</th>
-                  <th className="py-2 px-3 text-right">Meta (pre-GST)</th><th className="py-2 px-3 text-right">CAC</th><th className="py-2 px-3 text-right">AOV</th>
-                  <th className="py-2 px-3 text-right">Profit</th><th className="py-2 px-3 text-right">Margin</th>
+                  <th className="py-2.5 px-4">Product</th><th className="py-2.5 px-3 text-right">Orders</th><th className="py-2.5 px-3 text-right">Pace</th>
+                  <th className="py-2.5 px-3 text-right">CAC</th><th className="py-2.5 px-3 text-right">AOV</th><th className="py-2.5 px-3 text-right">Profit</th><th className="py-2.5 px-3 text-right">Need/day</th>
                 </tr></thead>
                 <tbody>
-                  {dailyRows.map(r => (
-                    <tr key={r.date} className={`border-b border-brand-300/50/50 ${r.empty ? 'opacity-30' : 'hover:bg-ev-light'}`}>
-                      <td className="py-2 px-3 text-xs font-mono text-txt-muted">
-                        {new Date(r.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', weekday: 'short' })}
-                      </td>
-                      {r.empty ? <td colSpan={7} className="py-2 px-3 text-xs text-txt-muted text-center">Not synced</td> : <>
-                        <td className={`py-2 px-3 text-right font-mono text-xs ${r.orders >= tOrdDaily ? 'text-cash-green' : 'text-cash-red'}`}>{r.orders}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(r.revenue)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(r.metaSpend / GST)}</td>
-                        <td className={`py-2 px-3 text-right font-mono text-xs ${(r.cpp/GST) <= tCACavg ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(r.cpp / GST)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(r.aov)}</td>
-                        <td className={`py-2 px-3 text-right font-mono text-xs font-bold ${r.profit >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(r.profit)}</td>
-                        <td className={`py-2 px-3 text-right font-mono text-xs ${r.margin >= 0.2 ? 'text-cash-green' : r.margin >= 0 ? 'text-yellow-600' : 'text-cash-red'}`}>{(r.margin*100).toFixed(1)}%</td>
-                      </>}
-                    </tr>
-                  ))}
+                  {targets.products.map(t => {
+                    const st = productStats(t)
+                    return (
+                      <tr key={t.code} className="border-b border-brand-300/50/50 hover:bg-ev-light cursor-pointer" onClick={() => setSelectedTab(t.code)}>
+                        <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="text-sm font-medium text-accent">{t.name}</span><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ev-light text-accent">{t.code}</span></div></td>
+                        <td className="py-3 px-3 text-right font-mono text-xs"><span className="font-bold text-txt-primary">{formatExact(st.aO)}</span><span className="text-txt-muted">/{formatExact(st.tO)}</span></td>
+                        <td className="py-3 px-3 text-right"><span className={`text-xs font-bold font-mono ${st.pacePct>=90?'text-cash-green':st.pacePct>=70?'text-yellow-600':'text-cash-red'}`}>{st.pacePct.toFixed(0)}%</span></td>
+                        <td className={`py-3 px-3 text-right font-mono text-xs ${st.aCAC>0 && st.aCAC<=t.cac?'text-cash-green':st.aCAC>0?'text-cash-red':'text-txt-muted'}`}>{st.aCAC>0?`₹${formatExact(Math.round(st.aCAC))}`:'--'}</td>
+                        <td className={`py-3 px-3 text-right font-mono text-xs ${st.aAOV>=t.aov*0.95?'text-cash-green':'text-yellow-600'}`}>₹{formatExact(Math.round(st.aAOV))}</td>
+                        <td className="py-3 px-3 text-right font-mono text-xs text-txt-secondary">₹{formatExact(st.aP)}</td>
+                        <td className={`py-3 px-3 text-right font-mono text-xs ${st.needDaily>st.avgDaily*1.3?'text-cash-red':'text-txt-secondary'}`}>{st.needDaily>0?st.needDaily:'-'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        </>)}
+
+        {/* PER-PRODUCT TABS */}
+        {targets.products.map(t => {
+          if (selectedTab !== t.code) return null
+          const st = productStats(t)
+          const onPace = st.pacePct >= 90
+          return (
+            <div key={t.code} className="space-y-4">
+              {/* Product header */}
+              <div className="glass-card p-5">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-accent">{t.name}</h3>
+                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-ev-light text-accent">{t.code}</span>
+                  </div>
+                  <span className={`text-sm font-bold px-3 py-1 rounded-lg ${onPace?'bg-green-50 text-cash-green':'bg-red-50 text-cash-red'}`}>
+                    {onPace ? 'On pace' : 'Behind pace'} · {st.pacePct.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <StatBox label="Orders (window)" actual={formatExact(st.aO)} target={formatExact(st.tO)} good={st.aO >= st.expectedByNow*0.9} sub={`${st.ordPct.toFixed(0)}% of goal · ${Math.round(st.avgDaily)}/day avg`} />
+                  <StatBox label="CAC (pre-GST)" actual={st.aCAC>0?`₹${formatExact(Math.round(st.aCAC))}`:'no spend'} target={`₹${formatExact(t.cac)}`} good={st.aCAC>0 && st.aCAC<=t.cac} sub="match Meta to window dates" />
+                  <StatBox label="AOV" actual={`₹${formatExact(Math.round(st.aAOV))}`} target={`₹${formatExact(t.aov)}`} good={st.aAOV>=t.aov*0.95} />
+                  <StatBox label="Profit (window)" actual={`₹${formatExact(st.aP)}`} target={`₹${formatExact(st.tProfit)}`} good={st.tProfit>0 && st.aP>=st.tProfit*(winElapsed/winDays)*0.9} sub={`₹${formatExact(Math.round(st.aPPO))}/order · ${(st.aMargin*100).toFixed(1)}% margin`} />
+                </div>
+              </div>
+
+              {/* What to do */}
+              <div className="glass-card p-5">
+                <h4 className="text-sm font-semibold text-accent mb-3">What to do for the rest of the window</h4>
+                <div className="space-y-2 text-sm text-txt-secondary">
+                  {winRemaining > 0 ? (<>
+                    <p>1. You need <span className="font-bold text-accent">{Math.max(0, st.tO - st.aO)}</span> more orders across <span className="font-bold text-accent">{winRemaining}</span> remaining days = <span className="font-bold text-accent">{st.needDaily > 0 ? st.needDaily : 0}/day</span> (running {Math.round(st.avgDaily)}/day now).</p>
+                    {st.aCAC > 0 && <p>2. At your CAC of ₹{formatExact(Math.round(st.aCAC))}, that's about <span className="font-bold text-accent">₹{formatExact(Math.round(st.needSpendDaily))}/day</span> of ad spend.</p>}
+                    {st.aCAC > t.cac && <p>3. CAC ₹{formatExact(Math.round(st.aCAC))} is above target ₹{formatExact(t.cac)} — pause ad sets above ₹{formatExact(Math.round(t.cac*1.1))}, duplicate winners.</p>}
+                    {st.aCAC > 0 && st.aCAC <= t.cac && <p>3. CAC ₹{formatExact(Math.round(st.aCAC))} is within target ₹{formatExact(t.cac)} — scale the winners.</p>}
+                    {st.aAOV < t.aov*0.95 && <p>4. AOV ₹{formatExact(Math.round(st.aAOV))} is below target ₹{formatExact(t.aov)} — push bundles and upsells.</p>}
+                  </>) : (
+                    <p>Window complete. Final: {formatExact(st.aO)} orders ({st.ordPct.toFixed(0)}% of the {formatExact(st.tO)} goal), ₹{formatExact(st.aP)} profit.</p>
+                  )}
+                  {st.aCAC === 0 && st.aO > 0 && <p className="text-cash-red">No Meta spend mapped to {t.code}. Fix the campaign code in Product Database, otherwise CAC and profit here are overstated.</p>}
+                </div>
+              </div>
+
+              {/* Payment mix */}
+              <div className="glass-card p-5">
+                <h4 className="text-sm font-semibold text-accent mb-3">Payment mix (this window)</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><p className="text-[10px] text-txt-muted uppercase">Prepaid</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.prepaidPct*100)}%</p>{st.aovPrepaid>0 && <p className="text-[10px] text-txt-muted">AOV ₹{formatExact(st.aovPrepaid)}</p>}</div>
+                  <div><p className="text-[10px] text-txt-muted uppercase">C2P</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.c2pPct*100)}%</p>{st.aovC2p>0 && <p className="text-[10px] text-txt-muted">AOV ₹{formatExact(st.aovC2p)}</p>}</div>
+                  <div><p className="text-[10px] text-txt-muted uppercase">COD</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.codPct*100)}%</p>{st.aovCod>0 && <p className="text-[10px] text-txt-muted">AOV ₹{formatExact(st.aovCod)}</p>}</div>
+                </div>
+              </div>
+
+              {/* Daily within window */}
+              <div className="glass-card overflow-hidden">
+                <div className="px-5 py-3 border-b border-brand-300/50"><h4 className="text-sm font-semibold text-accent">Day by day · {t.code}</h4></div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
+                      <th className="py-2 px-4">Date</th><th className="py-2 px-3 text-right">Orders</th><th className="py-2 px-3 text-right">Spend</th><th className="py-2 px-3 text-right">CAC</th><th className="py-2 px-3 text-right">Profit</th>
+                    </tr></thead>
+                    <tbody>
+                      {dailyRows.map(r => {
+                        const pr = r.empty ? null : (r.products || []).find(x => x.name === t.name)
+                        const o = pr?.totalUnits || 0
+                        const sp = (pr?.metaSpend || 0) / GST
+                        const pf = pr?.profit || 0
+                        const cac = o > 0 ? sp/o : 0
+                        return (
+                          <tr key={r.date} className={`border-b border-brand-300/50/50 ${r.empty?'opacity-30':'hover:bg-ev-light'}`}>
+                            <td className="py-2 px-4 text-xs font-mono text-txt-muted">{new Date(r.date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',weekday:'short'})}</td>
+                            {r.empty ? <td colSpan={4} className="py-2 px-3 text-xs text-txt-muted text-center">Not synced</td> : <>
+                              <td className="py-2 px-3 text-right font-mono text-xs font-bold text-txt-primary">{o}</td>
+                              <td className="py-2 px-3 text-right font-mono text-xs text-txt-muted">₹{formatExact(Math.round(sp))}</td>
+                              <td className={`py-2 px-3 text-right font-mono text-xs ${cac>0&&cac<=t.cac?'text-cash-green':cac>0?'text-cash-red':'text-txt-muted'}`}>{cac>0?`₹${formatExact(Math.round(cac))}`:'--'}</td>
+                              <td className={`py-2 px-3 text-right font-mono text-xs ${pf>=0?'text-cash-green':'text-cash-red'}`}>₹{formatExact(Math.round(pf))}</td>
+                            </>}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </>)}
     </div>
   )
