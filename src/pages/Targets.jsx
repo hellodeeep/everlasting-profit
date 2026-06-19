@@ -4,6 +4,7 @@ import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimate
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
+import { detectBuyMultiplier } from '../lib/vendorPrices'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
 
 function Bar({ pct, color = 'bg-brand-500', h = 'h-2.5' }) {
@@ -401,7 +402,7 @@ export default function Targets() {
   }, [windowDates, todayStr, getCachedData, setCachedData])
 
   // Build daily + MTD data
-  const { dailyRows, mtdPnl } = useMemo(() => {
+  const { dailyRows, mtdPnl, windowOrders } = useMemo(() => {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
@@ -425,7 +426,7 @@ export default function Targets() {
       const mtdMeta = allocateMetaSpend(allCampaigns, campaignMap)
       mtdPnl = calculateFullPnL(allOrders, mtdMeta, vendorPriceMap)
     }
-    return { dailyRows: rows, mtdPnl }
+    return { dailyRows: rows, mtdPnl, windowOrders: allOrders }
   }, [cache, windowDates])
 
   const p = mtdPnl
@@ -550,9 +551,53 @@ export default function Targets() {
     const needSpendDaily = needDaily * (aCAC > 0 ? aCAC : t.cac)
     const prepaidPct = actual?.prepaidPct || 0, c2pPct = actual?.c2pPct || 0, codPct = actual?.codPct || 0
     const aovPrepaid = actual?.aovPrepaid || 0, aovC2p = actual?.aovC2p || 0, aovCod = actual?.aovCod || 0
+
+    // Bundle mix: of this product's line items, how many were Buy 1 / Buy 2 / Buy 3
+    let b1 = 0, b2 = 0, b3 = 0
+    ;(windowOrders || []).forEach(o => {
+      ;(o.lineItems || []).forEach(li => {
+        if (getProductFamily(li.title) !== t.name) return
+        const mult = detectBuyMultiplier(li.title, li.variantTitle)
+        const qty = li.quantity || 1
+        if (mult >= 3) b3 += qty
+        else if (mult === 2) b2 += qty
+        else b1 += qty
+      })
+    })
+    const bundleTotal = b1 + b2 + b3
+    const bundle = {
+      total: bundleTotal,
+      b1, b2, b3,
+      b1Pct: bundleTotal > 0 ? b1 / bundleTotal : 0,
+      b2Pct: bundleTotal > 0 ? b2 / bundleTotal : 0,
+      b3Pct: bundleTotal > 0 ? b3 / bundleTotal : 0,
+    }
+
+    // Princess Combo: necklace + butterfly anklet sold as one variant on this product.
+    // Carve this product's orders into combo vs solo to compare AOV and profit/order.
+    let comboOrders = 0, comboRevenue = 0, soloOrders = 0, soloRevenue = 0
+    ;(windowOrders || []).forEach(o => {
+      ;(o.lineItems || []).forEach(li => {
+        if (getProductFamily(li.title) !== t.name) return
+        const isCombo = `${li.title} ${li.variantTitle || ''}`.toLowerCase().includes('princess combo')
+        const qty = li.quantity || 1
+        const lineRev = parseFloat(li.price || 0) * qty
+        if (isCombo) { comboOrders += qty; comboRevenue += lineRev }
+        else { soloOrders += qty; soloRevenue += lineRev }
+      })
+    })
+    const comboTotal = comboOrders + soloOrders
+    const combo = {
+      hasCombo: comboOrders > 0,
+      comboOrders, soloOrders,
+      attachPct: comboTotal > 0 ? comboOrders / comboTotal : 0,
+      comboAOV: comboOrders > 0 ? comboRevenue / comboOrders : 0,
+      soloAOV: soloOrders > 0 ? soloRevenue / soloOrders : 0,
+    }
+
     return { actual, aO, aM, aR, aP, aCAC, aAOV, aPPO, aMargin, tO, tProfit, tRev, tSpend,
       expectedByNow, pacePct, ordPct, profitPct, avgDaily, needDaily, needSpendDaily,
-      prepaidPct, c2pPct, codPct, aovPrepaid, aovC2p, aovCod }
+      prepaidPct, c2pPct, codPct, aovPrepaid, aovC2p, aovCod, bundle, combo }
   }
 
   // Window totals across all products (for overview)
@@ -818,7 +863,57 @@ export default function Targets() {
                 </div>
               </div>
 
-              {/* Daily within window */}
+              {/* Bundle mix: Buy 1 / Buy 2 / Buy 3 */}
+              <div className="glass-card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-accent">Bundle mix (this window)</h4>
+                  <span className="text-[11px] text-txt-muted">{formatExact(st.bundle.total)} line items</span>
+                </div>
+                {st.bundle.total > 0 ? (<>
+                  <div className="flex h-7 rounded-lg overflow-hidden mb-3">
+                    {st.bundle.b1Pct > 0 && <div style={{ width: `${st.bundle.b1Pct*100}%` }} className="bg-brand-400 flex items-center justify-center"><span className="text-[10px] font-bold text-white">{Math.round(st.bundle.b1Pct*100)}%</span></div>}
+                    {st.bundle.b2Pct > 0 && <div style={{ width: `${st.bundle.b2Pct*100}%` }} className="bg-brand-600 flex items-center justify-center"><span className="text-[10px] font-bold text-white">{Math.round(st.bundle.b2Pct*100)}%</span></div>}
+                    {st.bundle.b3Pct > 0 && <div style={{ width: `${st.bundle.b3Pct*100}%` }} className="bg-accent flex items-center justify-center"><span className="text-[10px] font-bold text-white">{Math.round(st.bundle.b3Pct*100)}%</span></div>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><p className="text-[10px] text-txt-muted uppercase flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-brand-400 inline-block" />Buy 1</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.bundle.b1Pct*100)}%</p><p className="text-[10px] text-txt-muted">{formatExact(st.bundle.b1)} orders</p></div>
+                    <div><p className="text-[10px] text-txt-muted uppercase flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-brand-600 inline-block" />Buy 2</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.bundle.b2Pct*100)}%</p><p className="text-[10px] text-txt-muted">{formatExact(st.bundle.b2)} orders</p></div>
+                    <div><p className="text-[10px] text-txt-muted uppercase flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-accent inline-block" />Buy 3</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.bundle.b3Pct*100)}%</p><p className="text-[10px] text-txt-muted">{formatExact(st.bundle.b3)} orders</p></div>
+                  </div>
+                </>) : (
+                  <p className="text-xs text-txt-muted">No bundle data in this window yet.</p>
+                )}
+              </div>
+
+              {/* Princess Combo performance (only if this product has combo orders) */}
+              {st.combo.hasCombo && (
+                <div className="glass-card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-accent">Princess Combo vs solo</h4>
+                    <span className="text-[11px] text-txt-muted">{(st.combo.attachPct*100).toFixed(1)}% of {t.code} orders are combo</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-xl p-4" style={{ background: 'rgba(233,213,246,0.25)' }}>
+                      <p className="text-[10px] text-txt-muted uppercase tracking-wider mb-1">Princess Combo</p>
+                      <p className="text-2xl font-bold font-mono text-accent">{formatExact(st.combo.comboOrders)}</p>
+                      <p className="text-[11px] text-txt-muted mt-0.5">orders · AOV ₹{formatExact(Math.round(st.combo.comboAOV))}</p>
+                    </div>
+                    <div className="rounded-xl p-4" style={{ background: 'rgba(55,35,72,0.05)' }}>
+                      <p className="text-[10px] text-txt-muted uppercase tracking-wider mb-1">Necklace solo</p>
+                      <p className="text-2xl font-bold font-mono text-txt-primary">{formatExact(st.combo.soloOrders)}</p>
+                      <p className="text-[11px] text-txt-muted mt-0.5">orders · AOV ₹{formatExact(Math.round(st.combo.soloAOV))}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-brand-300/50">
+                    <p className="text-xs text-txt-secondary">
+                      {st.combo.comboAOV > st.combo.soloAOV
+                        ? `Combo lifts AOV by ₹${formatExact(Math.round(st.combo.comboAOV - st.combo.soloAOV))} (${st.combo.soloAOV>0?Math.round((st.combo.comboAOV/st.combo.soloAOV-1)*100):0}% higher) on ${(st.combo.attachPct*100).toFixed(1)}% of orders.`
+                        : `Combo AOV ₹${formatExact(Math.round(st.combo.comboAOV))} is not above solo ₹${formatExact(Math.round(st.combo.soloAOV))} — check pricing and vendor cost.`}
+                    </p>
+                    <p className="text-[11px] text-txt-muted mt-1">Note: combo ships necklace + anklet, so set its variant vendor cost to the sum (~₹146) in Product Database, or profit here is overstated.</p>
+                  </div>
+                </div>
+              )}
               <div className="glass-card overflow-hidden">
                 <div className="px-5 py-3 border-b border-brand-300/50"><h4 className="text-sm font-semibold text-accent">Day by day · {t.code}</h4></div>
                 <div className="overflow-x-auto">

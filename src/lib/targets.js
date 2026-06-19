@@ -123,3 +123,105 @@ export const TARGETS_CACHE_KEY = 'targets_config'
 export function targetsKeyForMonth(month) {
   return `targets_config_${month}`
 }
+
+// ============================================================
+// MULTI-TARGET MODEL (v63+)
+// Each target is an independent object with a unique id, its own
+// date window, a baseline comparison window, and per-product goals.
+// ============================================================
+
+import { C2P_AMOUNT as _C2P, COD_DELIVERY_RATE as _CODdel, COD_DISPATCH_RATE as _CODdis, LOGISTICS_COSTS as _LOG, FEE_RATES as _FEE } from './vendorPrices'
+
+export const TARGETS_INDEX_KEY = 'targets_index'      // list of target ids + summaries
+export function targetKey(id) { return `target_${id}` } // one row per target
+
+export function newTargetId() {
+  return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+}
+
+export function dayCountBetween(start, end) {
+  if (!start || !end) return 0
+  const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00')
+  return Math.max(0, Math.round((e - s) / 86400000) + 1)
+}
+
+// Cost-per-order pieces given AOV and payment mix (shared with estimateProfit logic)
+function perOrderCosts({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace }) {
+  const codRate = Math.max(0, 1 - prepaidRate - c2pRate)
+  const prepaidRev = prepaidRate * aov
+  const c2pRev = c2pRate * (_C2P + Math.max(0, aov - _C2P) * _CODdel)
+  const codRev = codRate * aov * _CODdel
+  const expectedRevPerOrder = prepaidRev + c2pRev + codRev
+
+  const cogsPerOrder = vendorPrice
+  const codC2pRate = c2pRate + codRate
+  const box = _LOG.box
+  const warranty = prepaidRate * _LOG.warrantyCard + codC2pRate * _CODdis * _LOG.warrantyCard
+  const freeRing = isNecklace ? prepaidRate * _LOG.freeRing : 0
+  const packing = prepaidRate * _LOG.packingBag + codC2pRate * _CODdis * _LOG.packingBag
+  const shipping = prepaidRate * _LOG.shippingPrepaid + codC2pRate * _CODdis * _LOG.shippingCOD
+  const logisticsPerOrder = box + warranty + freeRing + packing + shipping
+
+  const cashfreeBase = prepaidRate * aov + c2pRate * _C2P
+  const feesPerOrder = cashfreeBase * (_FEE.cashfree + _FEE.engage + _FEE.checkout)
+
+  return { expectedRevPerOrder, cogsPerOrder, logisticsPerOrder, feesPerOrder }
+}
+
+// Given a target profit % (of revenue), solve for the max pre-GST CAC that still hits it.
+// profitPerOrder = targetPct * expectedRevPerOrder
+// profitPerOrder = expectedRevPerOrder - cac*1.18 - cogs - logistics - fees
+// => cac = (expectedRevPerOrder*(1-targetPct) - cogs - logistics - fees) / 1.18
+export function solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, targetProfitPct }) {
+  const { expectedRevPerOrder, cogsPerOrder, logisticsPerOrder, feesPerOrder } =
+    perOrderCosts({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace })
+  const allowedSpendPerOrder = expectedRevPerOrder * (1 - targetProfitPct) - cogsPerOrder - logisticsPerOrder - feesPerOrder
+  const cac = allowedSpendPerOrder / 1.18
+  return {
+    cac: Math.max(0, cac),
+    expectedRevPerOrder,
+    profitPerOrder: expectedRevPerOrder * targetProfitPct,
+    feasible: cac > 0,
+  }
+}
+
+// Build the full derived economics for a target's product list.
+// Each product carries: goalOrders, targetProfitPct, and baseline-derived aov/mix/vendorPrice.
+export function buildTargetEconomics(target) {
+  const days = dayCountBetween(target.windowStart, target.windowEnd)
+  const products = (target.products || []).map(p => {
+    const aov = p.aov || 0
+    const prepaidRate = (p.prepaidRate ?? 75) / 100
+    const c2pRate = (p.c2pRate ?? 10) / 100
+    const vendorPrice = p.vendorPrice || 0
+    const isNecklace = (p.name || '').toLowerCase().includes('necklace')
+    const targetProfitPct = (p.targetProfitPct ?? 15) / 100
+    const goalOrders = p.goalOrders || 0
+
+    const solved = solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, targetProfitPct })
+    const expectedRevenue = goalOrders * aov
+    const expectedSpend = goalOrders * solved.cac          // pre-GST
+    const expectedSpendGst = expectedSpend * 1.18
+    const expectedProfit = goalOrders * solved.profitPerOrder
+    const ordersPerDay = days > 0 ? goalOrders / days : 0
+
+    return {
+      ...p,
+      aov, prepaidRate, c2pRate, vendorPrice, targetProfitPct, goalOrders,
+      requiredCAC: solved.cac,
+      feasible: solved.feasible,
+      expectedRevenue, expectedSpend, expectedSpendGst, expectedProfit,
+      ordersPerDay,
+      spendPerDayGst: days > 0 ? expectedSpendGst / days : 0,
+      profitPerOrder: solved.profitPerOrder,
+    }
+  })
+  return {
+    days,
+    products,
+    totalGoalOrders: products.reduce((s, p) => s + p.goalOrders, 0),
+    totalExpectedRevenue: products.reduce((s, p) => s + p.expectedRevenue, 0),
+    totalExpectedSpend: products.reduce((s, p) => s + p.expectedSpend, 0),
+    totalExpectedProfit: products.reduce((s, p) => s + p.expectedProfit, 0),
+  }
+}
