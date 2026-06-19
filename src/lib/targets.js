@@ -189,13 +189,18 @@ export function solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, t
 // Each product carries: goalOrders, targetProfitPct, and baseline-derived aov/mix/vendorPrice.
 export function buildTargetEconomics(target) {
   const days = dayCountBetween(target.windowStart, target.windowEnd)
+  // Rates may be stored as percent (78) or fraction (0.78); normalize to fraction.
+  const norm = (v, dflt) => {
+    if (v === undefined || v === null) return dflt
+    return v > 1 ? v / 100 : v
+  }
   const products = (target.products || []).map(p => {
     const aov = p.aov || 0
-    const prepaidRate = (p.prepaidRate ?? 75) / 100
-    const c2pRate = (p.c2pRate ?? 10) / 100
+    const prepaidRate = norm(p.prepaidRate, 0.75)
+    const c2pRate = norm(p.c2pRate, 0.10)
     const vendorPrice = p.vendorPrice || 0
     const isNecklace = (p.name || '').toLowerCase().includes('necklace')
-    const targetProfitPct = (p.targetProfitPct ?? 15) / 100
+    const targetProfitPct = norm(p.targetProfitPct, 0.15)
     const goalOrders = p.goalOrders || 0
 
     const solved = solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, targetProfitPct })
