@@ -37,7 +37,8 @@ export function computeBaseline(getCachedData, start, end) {
       name: p.name,
       orders,
       ordersPerDay: daysWithData > 0 ? orders / daysWithData : 0,
-      aov: p.aovWithUpsells || (orders > 0 ? p.fullOrderRevenue / orders : 0) || (orders > 0 ? p.revenue / orders : 0),
+      // Gross AOV (what customer pays), NOT the COD-discounted expected revenue.
+      aov: orders > 0 ? ((p.fullOrderRevenue || p.aovWithUpsells * orders || 0) / orders) : 0,
       cac: orders > 0 ? metaPreGST / orders : 0,
       prepaidRate: p.prepaidPct || 0,
       c2pRate: p.c2pPct || 0,
