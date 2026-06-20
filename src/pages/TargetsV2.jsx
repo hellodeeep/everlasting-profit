@@ -549,6 +549,46 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
                   <Stat label="Profit" val={`₹${compactINR(st.aProfit)}`} sub={`target ₹${compactINR(ep.expectedProfit)}`} good={st.aProfit >= ep.expectedProfit * (winElapsed / winDays) * 0.9} />
                 </div>
               </div>
+
+              {/* Simple per-day: Target vs Current */}
+              <div className="glass-card overflow-hidden">
+                <div className="px-5 py-3 border-b border-brand-300/50"><h4 className="text-sm font-semibold text-accent">Per day</h4></div>
+                <table className="w-full text-left">
+                  <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
+                    <th className="py-2.5 px-5"></th><th className="py-2.5 px-4 text-right">Target</th><th className="py-2.5 px-5 text-right">Current</th>
+                  </tr></thead>
+                  <tbody>
+                    {(() => {
+                      const tOrdDay = ep.ordersPerDay || 0
+                      const tSpendDay = (ep.expectedSpend || 0) / (winDays || 1)   // pre-GST
+                      const tCAC = ep.requiredCAC || 0
+                      const cSpendDay = winElapsed > 0 ? st.aSpend / winElapsed : 0  // pre-GST
+                      const cell = (cur, tgt, good, fmt) => (
+                        <td className={`py-3 px-5 text-right font-mono text-sm font-bold ${good === undefined ? 'text-txt-primary' : good ? 'text-cash-green' : 'text-cash-red'}`}>{fmt(cur)}</td>
+                      )
+                      const rupee = (v) => `₹${formatExact(Math.round(v))}`
+                      const num = (v) => formatExact(Math.round(v))
+                      return <>
+                        <tr className="border-b border-brand-300/50/50">
+                          <td className="py-3 px-5 text-sm text-txt-secondary">Orders / day</td>
+                          <td className="py-3 px-4 text-right font-mono text-sm text-txt-muted">{num(tOrdDay)}</td>
+                          {cell(st.avgDaily, tOrdDay, st.avgDaily >= tOrdDay * 0.95, num)}
+                        </tr>
+                        <tr className="border-b border-brand-300/50/50">
+                          <td className="py-3 px-5 text-sm text-txt-secondary">Spend / day (pre-GST)</td>
+                          <td className="py-3 px-4 text-right font-mono text-sm text-txt-muted">{rupee(tSpendDay)}</td>
+                          {cell(cSpendDay, tSpendDay, undefined, rupee)}
+                        </tr>
+                        <tr>
+                          <td className="py-3 px-5 text-sm text-txt-secondary">CAC (pre-GST)</td>
+                          <td className="py-3 px-4 text-right font-mono text-sm text-txt-muted">≤{rupee(tCAC)}</td>
+                          {cell(st.aCAC, tCAC, st.aCAC > 0 && st.aCAC <= tCAC, (v) => st.aCAC > 0 ? rupee(v) : '--')}
+                        </tr>
+                      </>
+                    })()}
+                  </tbody>
+                </table>
+              </div>
               <div className="glass-card p-5">
                 <h4 className="text-sm font-semibold text-accent mb-3">What to do</h4>
                 <div className="space-y-2 text-sm text-txt-secondary">
