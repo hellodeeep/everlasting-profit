@@ -185,6 +185,21 @@ export function solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, t
   }
 }
 
+// Full per-order economics breakdown for transparency + break-even.
+export function perOrderBreakdown({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace }) {
+  const { expectedRevPerOrder, cogsPerOrder, logisticsPerOrder, feesPerOrder } =
+    perOrderCosts({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace })
+  // Break-even CAC: the pre-GST CAC at which profit per order = 0
+  const breakEvenCAC = (expectedRevPerOrder - cogsPerOrder - logisticsPerOrder - feesPerOrder) / 1.18
+  return {
+    expectedRevPerOrder,
+    cogsPerOrder,
+    logisticsPerOrder,
+    feesPerOrder,
+    breakEvenCAC: Math.max(0, breakEvenCAC),
+  }
+}
+
 // Build the full derived economics for a target's product list.
 // Each product carries: goalOrders, targetProfitPct, and baseline-derived aov/mix/vendorPrice.
 export function buildTargetEconomics(target) {
@@ -204,6 +219,7 @@ export function buildTargetEconomics(target) {
     const goalOrders = p.goalOrders || 0
 
     const solved = solveCAC({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace, targetProfitPct })
+    const bd = perOrderBreakdown({ aov, prepaidRate, c2pRate, vendorPrice, isNecklace })
     const expectedRevenue = goalOrders * aov
     const expectedSpend = goalOrders * solved.cac          // pre-GST
     const expectedSpendGst = expectedSpend * 1.18
@@ -214,11 +230,13 @@ export function buildTargetEconomics(target) {
       ...p,
       aov, prepaidRate, c2pRate, vendorPrice, targetProfitPct, goalOrders,
       requiredCAC: solved.cac,
+      breakEvenCAC: bd.breakEvenCAC,
       feasible: solved.feasible,
       expectedRevenue, expectedSpend, expectedSpendGst, expectedProfit,
       ordersPerDay,
       spendPerDayGst: days > 0 ? expectedSpendGst / days : 0,
       profitPerOrder: solved.profitPerOrder,
+      breakdown: bd,
     }
   })
   return {

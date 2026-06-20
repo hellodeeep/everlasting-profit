@@ -3,8 +3,9 @@ import { Target, Calendar, Plus, Trash2, ChevronLeft, RefreshCw, TrendingUp, Ale
 import { useDataStore } from '../lib/dataStore'
 import { calculateFullPnL, formatExact, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
-import { newTargetId, targetKey, TARGETS_INDEX_KEY, dayCountBetween, buildTargetEconomics, solveCAC } from '../lib/targets'
+import { newTargetId, targetKey, TARGETS_INDEX_KEY, dayCountBetween, buildTargetEconomics, solveCAC, perOrderBreakdown } from '../lib/targets'
 import { computeBaseline } from '../lib/baseline'
+import { detectBuyMultiplier } from '../lib/vendorPrices'
 
 const GST = 1.18
 const fmtD = (ds) => ds ? new Date(ds + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''
@@ -323,7 +324,7 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
   const winRemaining = Math.max(0, winDays - winElapsed)
 
   // actuals over elapsed window days
-  const { actual, dailyRows } = useMemo(() => {
+  const { actual, dailyRows, windowOrders } = useMemo(() => {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
@@ -348,7 +349,7 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
       const meta = allocateMetaSpend(allCampaigns, campaignMap)
       actual = calculateFullPnL(allOrders, meta, vendorPriceMap)
     }
-    return { actual, dailyRows: rows }
+    return { actual, dailyRows: rows, windowOrders: allOrders }
   }, [cache, target, started, today])
 
   // per-product live status
@@ -365,7 +366,36 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
     const onPace = aO >= expectedByNow * 0.95
     const needDaily = winRemaining > 0 ? Math.ceil((ep.goalOrders - aO) / winRemaining) : 0
     const avgDaily = winElapsed > 0 ? aO / winElapsed : 0
-    return { a, aO, aSpend, aRev, aProfit, aCAC, aAOV, expectedByNow, pacePct, onPace, needDaily, avgDaily }
+    // Projection: if current daily pace holds, where do we land at window end
+    const projOrders = Math.round(avgDaily * winDays)
+    const projProfit = aO > 0 ? (aProfit / aO) * projOrders : 0
+    const willHit = projOrders >= ep.goalOrders * 0.98
+    // Break-even + headroom
+    const breakEven = ep.breakEvenCAC || 0
+    const headroom = breakEven - aCAC      // how far below break-even we are (positive = safe)
+    // Sensitivity: profit change if CAC drops ₹50 / AOV lifts ₹100 over remaining goal orders
+    const remOrders = Math.max(0, ep.goalOrders - aO)
+    const dProfitCAC50 = remOrders * 50            // ₹50 lower CAC saves ₹50/order pre-GST... approx *1.18
+    const dProfitAOV100 = remOrders * 100 * (ep.targetProfitPct || 0.15)
+    // Payment mix + bundle mix from window orders
+    let prepaid = 0, c2p = 0, cod = 0, b1 = 0, b2 = 0, b3 = 0
+    ;(windowOrders || []).forEach(o => {
+      ;(o.lineItems || []).forEach(li => {
+        if (getProductFamily(li.title) !== ep.name) return
+        const qty = li.quantity || 1
+        const m = detectBuyMultiplier(li.title, li.variantTitle)
+        if (m >= 3) b3 += qty; else if (m === 2) b2 += qty; else b1 += qty
+        const pt = (o.paymentType || '').toLowerCase()
+        if (pt.includes('prepaid')) prepaid += qty
+        else if (pt.includes('c2p') || pt.includes('partial')) c2p += qty
+        else cod += qty
+      })
+    })
+    const bt = b1 + b2 + b3, pt = prepaid + c2p + cod
+    return { a, aO, aSpend, aRev, aProfit, aCAC, aAOV, expectedByNow, pacePct, onPace, needDaily, avgDaily,
+      projOrders, projProfit, willHit, breakEven, headroom, dProfitCAC50, dProfitAOV100,
+      mix: { prepaid: pt?prepaid/pt:0, c2p: pt?c2p/pt:0, cod: pt?cod/pt:0 },
+      bundle: { b1, b2, b3, b1Pct: bt?b1/bt:0, b2Pct: bt?b2/bt:0, b3Pct: bt?b3/bt:0, total: bt } }
   }
 
   // overall live
@@ -416,6 +446,19 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
                 : `Goal already hit. ${winRemaining} days left to build cushion.`}
             </p>
           )}
+          {winElapsed > 0 && (() => {
+            const projO = Math.round((aOrders / winElapsed) * winDays)
+            const projP = aOrders > 0 ? (aProfit / aOrders) * projO : 0
+            const hit = projO >= econ.totalGoalOrders * 0.98
+            return (
+              <div className="mt-3 pt-3 border-t border-brand-300/50 flex items-center gap-2 flex-wrap">
+                <TrendingUp size={15} className={hit ? 'text-cash-green' : 'text-cash-red'} />
+                <span className="text-sm text-txt-secondary">
+                  Projected at current pace: <b className={hit ? 'text-cash-green' : 'text-cash-red'}>{formatExact(projO)} orders</b> ({Math.round(projO/econ.totalGoalOrders*100)}% of goal), <b className="text-accent">₹{compactINR(projP)}</b> profit by {fmtD(target.windowEnd)}.
+                </span>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -456,7 +499,14 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
           })}
         </div>
 
-        {tab === 'overview' && (
+        {tab === 'overview' && (<>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="glass-card p-4"><p className="metric-label mb-1">Orders</p><p className="text-xl font-bold font-mono text-txt-primary">{formatExact(aOrders)}</p><p className="text-[11px] text-txt-muted">goal {formatExact(econ.totalGoalOrders)} · {Math.round(aOrders/econ.totalGoalOrders*100)}%</p></div>
+            <div className="glass-card p-4"><p className="metric-label mb-1">Revenue</p><p className="text-xl font-bold font-mono text-txt-primary">₹{compactINR(aRev)}</p><p className="text-[11px] text-txt-muted">exp ₹{compactINR(econ.totalExpectedRevenue)}</p></div>
+            <div className="glass-card p-4"><p className="metric-label mb-1">Ad spend</p><p className="text-xl font-bold font-mono text-txt-primary">₹{compactINR(aSpend)}</p><p className="text-[11px] text-txt-muted">budget ₹{compactINR(econ.totalExpectedSpend)}</p></div>
+            <div className="glass-card p-4"><p className="metric-label mb-1">Profit</p><p className="text-xl font-bold font-mono text-cash-green">₹{compactINR(aProfit)}</p><p className="text-[11px] text-txt-muted">target ₹{compactINR(econ.totalExpectedProfit)}</p></div>
+            <div className="glass-card p-4"><p className="metric-label mb-1">Blended CAC</p><p className="text-xl font-bold font-mono text-txt-primary">₹{formatExact(Math.round(aCAC))}</p><p className="text-[11px] text-txt-muted">{aRev>0?(aProfit/aRev*100).toFixed(1):0}% margin</p></div>
+          </div>
           <div className="glass-card overflow-hidden">
             <table className="w-full text-left">
               <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
@@ -478,7 +528,7 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
               </tbody>
             </table>
           </div>
-        )}
+        </>)}
 
         {econ.products.map(ep => {
           if (tab !== ep.code) return null
@@ -507,6 +557,80 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
                     {st.aAOV < ep.aov * 0.95 && <p>3. AOV ₹{formatExact(Math.round(st.aAOV))} is below the assumed ₹{formatExact(ep.aov)} — push bundles/upsells.</p>}
                   </> : <p>Window complete. Final: {formatExact(st.aO)} orders ({Math.round(st.aO / ep.goalOrders * 100)}% of goal), ₹{compactINR(st.aProfit)} profit.</p>}
                   {st.aCAC === 0 && st.aO > 0 && <p className="text-cash-red">No Meta spend mapped to {ep.code} — fix the campaign code, profit is overstated.</p>}
+                </div>
+              </div>
+
+              {/* Per-order economics: where every rupee goes */}
+              <div className="glass-card p-5">
+                <h4 className="text-sm font-semibold text-accent mb-3">Per-order economics</h4>
+                <div className="space-y-1.5 text-sm">
+                  {(() => {
+                    const bd = ep.breakdown || {}
+                    const adSpendPerOrder = (ep.requiredCAC || 0) * 1.18
+                    const row = (label, val, sign, strong) => (
+                      <div className={`flex justify-between ${strong ? 'pt-1.5 border-t border-brand-300/50' : ''}`}>
+                        <span className={strong ? 'font-semibold text-accent' : 'text-txt-muted'}>{label}</span>
+                        <span className={`font-mono ${strong ? 'font-bold text-cash-green' : 'text-txt-secondary'}`}>{sign}₹{formatExact(Math.round(val))}</span>
+                      </div>
+                    )
+                    return <>
+                      {row('Gross AOV', ep.aov)}
+                      {row('Expected revenue (after COD discount)', bd.expectedRevPerOrder)}
+                      {row('COGS (vendor)', bd.cogsPerOrder, '-')}
+                      {row('Logistics (box, ship, packing)', bd.logisticsPerOrder, '-')}
+                      {row('Payment fees', bd.feesPerOrder, '-')}
+                      {row('Ad spend (at required CAC, incl GST)', adSpendPerOrder, '-')}
+                      {row('Profit per order', ep.profitPerOrder, '', true)}
+                    </>
+                  })()}
+                </div>
+              </div>
+
+              {/* Break-even + headroom + sensitivity */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="glass-card p-4">
+                  <p className="metric-label mb-1">Break-even CAC</p>
+                  <p className="text-xl font-bold font-mono text-txt-primary">₹{formatExact(Math.round(ep.breakEvenCAC))}</p>
+                  <p className="text-[11px] text-txt-muted mt-0.5">above this, {ep.code} loses money</p>
+                </div>
+                <div className="glass-card p-4">
+                  <p className="metric-label mb-1">CAC headroom</p>
+                  <p className={`text-xl font-bold font-mono ${st.headroom >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>{st.aCAC > 0 ? `₹${formatExact(Math.round(st.headroom))}` : '--'}</p>
+                  <p className="text-[11px] text-txt-muted mt-0.5">gap from your CAC to break-even</p>
+                </div>
+                <div className="glass-card p-4">
+                  <p className="metric-label mb-1">Levers (remaining orders)</p>
+                  <p className="text-[11px] text-txt-secondary mt-1">CAC −₹50 → <b className="text-cash-green">+₹{compactINR(st.dProfitCAC50)}</b></p>
+                  <p className="text-[11px] text-txt-secondary">AOV +₹100 → <b className="text-cash-green">+₹{compactINR(st.dProfitAOV100)}</b></p>
+                </div>
+              </div>
+
+              {/* Payment + bundle mix */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="glass-card p-5">
+                  <h4 className="text-sm font-semibold text-accent mb-3">Payment mix</h4>
+                  {st.mix.prepaid + st.mix.c2p + st.mix.cod > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><p className="text-[10px] text-txt-muted uppercase">Prepaid</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.mix.prepaid*100)}%</p></div>
+                      <div><p className="text-[10px] text-txt-muted uppercase">C2P</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.mix.c2p*100)}%</p></div>
+                      <div><p className="text-[10px] text-txt-muted uppercase">COD</p><p className="text-lg font-bold font-mono text-txt-primary">{Math.round(st.mix.cod*100)}%</p></div>
+                    </div>
+                  ) : <p className="text-xs text-txt-muted">No data yet.</p>}
+                </div>
+                <div className="glass-card p-5">
+                  <h4 className="text-sm font-semibold text-accent mb-3">Bundle mix (Buy 1/2/3)</h4>
+                  {st.bundle.total > 0 ? (<>
+                    <div className="flex h-6 rounded-lg overflow-hidden mb-2">
+                      {st.bundle.b1Pct > 0 && <div style={{ width: `${st.bundle.b1Pct*100}%` }} className="bg-brand-400" />}
+                      {st.bundle.b2Pct > 0 && <div style={{ width: `${st.bundle.b2Pct*100}%` }} className="bg-brand-600" />}
+                      {st.bundle.b3Pct > 0 && <div style={{ width: `${st.bundle.b3Pct*100}%` }} className="bg-accent" />}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><p className="text-[10px] text-txt-muted uppercase">Buy 1</p><p className="text-base font-bold font-mono text-txt-primary">{Math.round(st.bundle.b1Pct*100)}%</p></div>
+                      <div><p className="text-[10px] text-txt-muted uppercase">Buy 2</p><p className="text-base font-bold font-mono text-txt-primary">{Math.round(st.bundle.b2Pct*100)}%</p></div>
+                      <div><p className="text-[10px] text-txt-muted uppercase">Buy 3</p><p className="text-base font-bold font-mono text-txt-primary">{Math.round(st.bundle.b3Pct*100)}%</p></div>
+                    </div>
+                  </>) : <p className="text-xs text-txt-muted">No data yet.</p>}
                 </div>
               </div>
             </div>
