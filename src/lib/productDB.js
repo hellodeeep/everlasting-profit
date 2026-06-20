@@ -63,17 +63,21 @@ export function buildCampaignMap(products) {
 // Returns { productName: spendAmount, _unallocated: spendAmount }
 export function allocateMetaSpend(campaigns, campaignMap) {
   const allocation = { _unallocated: 0, _total: 0, _totalWithGST: 0 }
+  const metaPurchases = {}   // product -> Meta-attributed purchase count
   const GST_RATE = 0.18
 
   campaigns.forEach(c => {
     const name = (c.campaignName || c.campaign_name || '').toUpperCase()
     const spend = c.spend || 0
+    const purchases = c.purchases || 0
     let matched = false
 
     for (const [code, productName] of Object.entries(campaignMap)) {
       if (name.includes(code)) {
         if (!allocation[productName]) allocation[productName] = 0
+        if (!metaPurchases[productName]) metaPurchases[productName] = 0
         allocation[productName] += spend
+        metaPurchases[productName] += purchases
         matched = true
         break
       }
@@ -88,10 +92,11 @@ export function allocateMetaSpend(campaigns, campaignMap) {
   // Add 18% GST
   allocation._totalWithGST = allocation._total * (1 + GST_RATE)
   Object.keys(allocation).forEach(key => {
-    if (key !== '_total' && key !== '_totalWithGST') {
+    if (key !== '_total' && key !== '_totalWithGST' && !key.startsWith('_')) {
       allocation[key + '_withGST'] = allocation[key] * (1 + GST_RATE)
     }
   })
+  allocation._metaPurchases = metaPurchases
 
   return allocation
 }

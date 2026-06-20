@@ -258,6 +258,8 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     const metaKey = p.name + '_withGST'
     const hasCampaignCode = metaAllocation.hasOwnProperty(p.name)
     const pAds = metaAllocation[metaKey] || 0
+    const pAdsPreGST = (metaAllocation[p.name] || 0)
+    const pMetaPurchases = (metaAllocation._metaPurchases && metaAllocation._metaPurchases[p.name]) || 0
     const pLogistics = totalLogistics * share
     const pFees = totalFees * share
     const pExpense = p.vendorCost + pLogistics + pFees + pAds
@@ -296,7 +298,9 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     return { ...p, orderCount, prepaidOrderCount, c2pOrderCount, codOrderCount,
       expectedRevenue: pExpRev,
       allocatedLogistics: pLogistics, allocatedFees: pFees,
-      metaSpend: pAds, hasCampaignCode,
+      metaSpend: pAds, metaSpendPreGST: pAdsPreGST, metaPurchases: pMetaPurchases,
+      metaAttributedCAC: pMetaPurchases > 0 ? pAdsPreGST / pMetaPurchases : 0,
+      hasCampaignCode,
       totalExpense: pExpense, profit: pProfit,
       margin: pExpRev > 0 ? pProfit / pExpRev : 0,
       // New metrics

@@ -361,6 +361,9 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
     const aRev = a?.revenue || 0
     const aProfit = a?.profit || 0
     const aCAC = aO > 0 ? aSpend / aO : 0
+    // Meta-attributed CAC: spend / Meta's claimed purchases (matches Ads Manager, pre-GST)
+    const metaPurchases = a?.metaPurchases || 0
+    const metaCAC = a?.metaAttributedCAC || 0
     // Gross AOV (what customer pays), same field the Dashboard uses — NOT discounted expected revenue.
     const aAOV = a?.aovWithUpsells || (aOrders > 0 ? (a?.fullOrderRevenue || 0) / aOrders : 0)
     const expectedByNow = winDays > 0 ? ep.goalOrders * (winElapsed / winDays) : 0
@@ -394,7 +397,7 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
       })
     })
     const bt = b1 + b2 + b3, pt = prepaid + c2p + cod
-    return { a, aO, aSpend, aRev, aProfit, aCAC, aAOV, expectedByNow, pacePct, onPace, needDaily, avgDaily,
+    return { a, aO, aSpend, aRev, aProfit, aCAC, metaCAC, metaPurchases, aAOV, expectedByNow, pacePct, onPace, needDaily, avgDaily,
       projOrders, projProfit, willHit, breakEven, headroom, dProfitCAC50, dProfitAOV100,
       mix: { prepaid: pt?prepaid/pt:0, c2p: pt?c2p/pt:0, cod: pt?cod/pt:0 },
       bundle: { b1, b2, b3, b1Pct: bt?b1/bt:0, b2Pct: bt?b2/bt:0, b3Pct: bt?b3/bt:0, total: bt } }
@@ -544,7 +547,7 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <Stat label="Orders" val={formatExact(st.aO)} sub={`goal ${formatExact(ep.goalOrders)} · ${Math.round(st.avgDaily)}/day`} good={st.onPace} />
-                  <Stat label="CAC (pre-GST)" val={st.aCAC > 0 ? `₹${formatExact(Math.round(st.aCAC))}` : 'no spend'} sub={`required ≤₹${formatExact(Math.round(ep.requiredCAC))}`} good={st.aCAC > 0 && st.aCAC <= ep.requiredCAC} />
+                  <Stat label="CAC · actual (pre-GST)" val={st.aCAC > 0 ? `₹${formatExact(Math.round(st.aCAC))}` : 'no spend'} sub={st.metaCAC > 0 ? `Meta-attr ₹${formatExact(Math.round(st.metaCAC))} · required ≤₹${formatExact(Math.round(ep.requiredCAC))}` : `required ≤₹${formatExact(Math.round(ep.requiredCAC))}`} good={st.aCAC > 0 && st.aCAC <= ep.requiredCAC} />
                   <Stat label="AOV" val={`₹${formatExact(Math.round(st.aAOV))}`} sub={`assumed ₹${formatExact(ep.aov)}`} good={st.aAOV >= ep.aov * 0.95} />
                   <Stat label="Profit" val={`₹${compactINR(st.aProfit)}`} sub={`target ₹${compactINR(ep.expectedProfit)}`} good={st.aProfit >= ep.expectedProfit * (winElapsed / winDays) * 0.9} />
                 </div>
@@ -588,6 +591,32 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
                     })()}
                   </tbody>
                 </table>
+              </div>
+
+              {/* CAC reconciliation: actual vs Meta-attributed */}
+              <div className="glass-card p-5">
+                <h4 className="text-sm font-semibold text-accent mb-1">CAC reconciliation</h4>
+                <p className="text-[11px] text-txt-muted mb-3">Why this differs from Meta: GST (you pay 18% on top) + attribution (Meta claims more purchases than real Shopify orders). Both are correct.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-xl p-4" style={{ background: 'rgba(55,35,72,0.05)' }}>
+                    <p className="text-[10px] text-txt-muted uppercase tracking-wider mb-2">Actual (your real orders)</p>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-txt-muted">Orders</span><span className="font-mono font-bold text-txt-primary">{formatExact(st.aO)}</span></div>
+                      <div className="flex justify-between"><span className="text-txt-muted">Spend (pre-GST)</span><span className="font-mono text-txt-secondary">₹{formatExact(Math.round(st.aSpend))}</span></div>
+                      <div className="flex justify-between border-t border-brand-300/50 pt-1 mt-1"><span className="text-accent font-semibold">CAC pre-GST</span><span className="font-mono font-bold text-accent">₹{formatExact(Math.round(st.aCAC))}</span></div>
+                      <div className="flex justify-between"><span className="text-txt-muted">CAC with GST</span><span className="font-mono text-txt-secondary">₹{formatExact(Math.round(st.aCAC * 1.18))}</span></div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl p-4" style={{ background: 'rgba(233,213,246,0.25)' }}>
+                    <p className="text-[10px] text-txt-muted uppercase tracking-wider mb-2">Meta-attributed (Ads Manager)</p>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-txt-muted">Purchases</span><span className="font-mono font-bold text-txt-primary">{st.metaPurchases > 0 ? formatExact(st.metaPurchases) : '--'}</span></div>
+                      <div className="flex justify-between"><span className="text-txt-muted">Spend (pre-GST)</span><span className="font-mono text-txt-secondary">₹{formatExact(Math.round(st.aSpend))}</span></div>
+                      <div className="flex justify-between border-t border-brand-300/50 pt-1 mt-1"><span className="text-accent font-semibold">CAC pre-GST</span><span className="font-mono font-bold text-accent">{st.metaCAC > 0 ? `₹${formatExact(Math.round(st.metaCAC))}` : '--'}</span></div>
+                      <div className="flex justify-between"><span className="text-txt-muted">matches Ads Manager</span><span className="font-mono text-txt-muted text-[11px]">cost/purchase</span></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="glass-card p-5">
                 <h4 className="text-sm font-semibold text-accent mb-3">What to do</h4>
