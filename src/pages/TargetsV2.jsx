@@ -356,11 +356,13 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
   const productStatus = (ep) => {
     const a = actual?.products.find(pr => pr.name === ep.name)
     const aO = a?.totalUnits || 0
+    const aOrders = a?.orderCount || aO   // unique orders for AOV
     const aSpend = (a?.metaSpend || 0) / GST
     const aRev = a?.revenue || 0
     const aProfit = a?.profit || 0
     const aCAC = aO > 0 ? aSpend / aO : 0
-    const aAOV = aO > 0 ? aRev / aO : 0
+    // Gross AOV (what customer pays), same field the Dashboard uses — NOT discounted expected revenue.
+    const aAOV = a?.aovWithUpsells || (aOrders > 0 ? (a?.fullOrderRevenue || 0) / aOrders : 0)
     const expectedByNow = winDays > 0 ? ep.goalOrders * (winElapsed / winDays) : 0
     const pacePct = expectedByNow > 0 ? aO / expectedByNow * 100 : 0
     const onPace = aO >= expectedByNow * 0.95
