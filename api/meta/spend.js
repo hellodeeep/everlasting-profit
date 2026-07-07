@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       : `act_${META_AD_ACCOUNT_ID}`;
 
     const fields = 'campaign_name,campaign_id,spend,impressions,clicks,actions,cost_per_action_type,purchase_roas';
-    const url = `https://graph.facebook.com/v19.0/${accountId}/insights?fields=${fields}&time_range={"since":"${since}","until":"${until}"}&level=${level}&limit=500&access_token=${META_ACCESS_TOKEN}`;
+    const url = `https://graph.facebook.com/v23.0/${accountId}/insights?fields=${fields}&time_range={"since":"${since}","until":"${until}"}&level=${level}&limit=500&access_token=${META_ACCESS_TOKEN}`;
 
     const response = await fetch(url);
     if (!response.ok) {

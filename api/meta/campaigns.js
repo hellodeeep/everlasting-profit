@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   try {
     const allData = [];
     const fields = 'campaign_name,campaign_id,adset_name,adset_id,ad_name,ad_id,spend,impressions,clicks,actions,cost_per_action_type,purchase_roas,cpm,cpc,ctr';
-    let url = `https://graph.facebook.com/v19.0/${accountId}/insights?fields=${fields}&time_range={"since":"${since}","until":"${until}"}&level=${level}&limit=500&access_token=${META_ACCESS_TOKEN}`;
+    let url = `https://graph.facebook.com/v23.0/${accountId}/insights?fields=${fields}&time_range={"since":"${since}","until":"${until}"}&level=${level}&limit=500&access_token=${META_ACCESS_TOKEN}`;
 
     // Paginate
     while (url) {
