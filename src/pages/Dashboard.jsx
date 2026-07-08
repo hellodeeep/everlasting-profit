@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { RefreshCw, Calendar, AlertCircle, BarChart, ChevronDown, ChevronRight, ChevronLeft, X, Filter, AlertTriangle, Download, Clock, Check } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
-import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
+import { calculateFullPnL, formatINR, formatPercent, formatExact, setFamilyAliases } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { useDataStore } from '../lib/dataStore'
 
@@ -159,7 +159,7 @@ export default function Dashboard() {
   // Product database
   const dbProducts = useMemo(() => getProducts(), [rawData])
   const campaignMap = useMemo(() => buildCampaignMap(dbProducts), [dbProducts])
-  const vendorPriceMap = useMemo(() => buildVendorPriceMap(dbProducts), [dbProducts])
+  const vendorPriceMap = useMemo(() => { setFamilyAliases(dbProducts); return buildVendorPriceMap(dbProducts) }, [dbProducts])
 
   const metaAllocation = useMemo(() => {
     if (!rawData?.metaCampaigns) return {}

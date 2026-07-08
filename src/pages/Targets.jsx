@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { Target, TrendingUp, Calendar, Zap, RefreshCw, ChevronDown, ChevronUp, Info, ArrowUp, ArrowDown, Plus, Trash2, Settings, Save, X } from 'lucide-react'
 import { getDaysInMonth, getDaysElapsed, getCurrentMonth, buildTargets, estimateProfit, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY, targetsKeyForMonth } from '../lib/targets'
 import { useDataStore } from '../lib/dataStore'
-import { calculateFullPnL, formatExact, formatPercent, getProductFamily } from '../lib/profitEngine'
+import { calculateFullPnL, formatExact, formatPercent, getProductFamily, setFamilyAliases } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { detectBuyMultiplier } from '../lib/vendorPrices'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
@@ -406,6 +406,7 @@ export default function Targets() {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
+    setFamilyAliases(dbP)
     const rows = []
     let allOrders = [], allCampaigns = []
 
@@ -492,6 +493,7 @@ export default function Targets() {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
+    setFamilyAliases(dbP)
     const metaAlloc = allocateMetaSpend(allCampaigns, campaignMap)
     const pnl = calculateFullPnL(allOrders, metaAlloc, vendorPriceMap)
 

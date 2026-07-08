@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, BarChart, EyeOff, Eye } from 'lucide-react'
 import { useDataStore } from '../lib/dataStore'
-import { calculateFullPnL, formatExact } from '../lib/profitEngine'
+import { calculateFullPnL, formatExact, setFamilyAliases } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { getDaysInMonth, getDaysElapsed, buildTargets, DEFAULT_RAW_TARGETS, TARGETS_CACHE_KEY, targetsKeyForMonth } from '../lib/targets'
 
@@ -79,6 +79,7 @@ export default function Summary() {
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
+    setFamilyAliases(dbP)
     let allOrders = [], allCampaigns = []
 
     // If the target is a custom window, compare actuals over that exact window

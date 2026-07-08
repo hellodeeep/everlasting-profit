@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Save, X, Edit2, Package, AlertTriangle, Search, Zap, Check } from 'lucide-react'
 import { getProducts, upsertProduct, deleteProduct } from '../lib/productDB'
 import { DEFAULT_VENDOR_PRICES } from '../lib/vendorPrices'
-import { getProductFamily } from '../lib/profitEngine'
+import { getProductFamily, setFamilyAliases } from '../lib/profitEngine'
 import { useDataStore } from '../lib/dataStore'
 
 const EMPTY = { name: '', vendorPrice: '', campaignCode: '', matchPatterns: '' }
@@ -62,6 +62,10 @@ export default function Products() {
 
   useEffect(() => { setProducts(getProducts()) }, [])
 
+  // Keep engine family-aliases in sync with the product DB so auto-detect
+  // buckets aliased titles (e.g. the hair-clip pack) into a single family.
+  useMemo(() => setFamilyAliases(products), [products])
+
   // Auto-detect product families from cached order data
   const detectedProducts = useMemo(() => {
     const families = new Map()
@@ -80,7 +84,7 @@ export default function Products() {
     return Array.from(families.entries())
       .map(([name, data]) => ({ name, count: data.count, sampleTitles: Array.from(data.titles).slice(0, 3) }))
       .sort((a, b) => b.count - a.count)
-  }, [cache])
+  }, [cache, products])
 
   // Products not yet in database
   const existingNames = new Set(products.map(p => p.name.toLowerCase()))
