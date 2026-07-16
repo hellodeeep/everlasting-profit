@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { RefreshCw, Calendar, AlertCircle, BarChart, ChevronDown, ChevronRight, ChevronLeft, X, Filter, AlertTriangle, Download, Clock, Check } from 'lucide-react'
 import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
-import { calculateFullPnL, formatINR, formatPercent, formatExact, setFamilyAliases } from '../lib/profitEngine'
+import { calculateFullPnL, formatINR, formatPercent, formatExact } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { useDataStore } from '../lib/dataStore'
 
@@ -159,7 +159,7 @@ export default function Dashboard() {
   // Product database
   const dbProducts = useMemo(() => getProducts(), [rawData])
   const campaignMap = useMemo(() => buildCampaignMap(dbProducts), [dbProducts])
-  const vendorPriceMap = useMemo(() => { setFamilyAliases(dbProducts); return buildVendorPriceMap(dbProducts) }, [dbProducts])
+  const vendorPriceMap = useMemo(() => buildVendorPriceMap(dbProducts), [dbProducts])
 
   const metaAllocation = useMemo(() => {
     if (!rawData?.metaCampaigns) return {}
@@ -197,7 +197,11 @@ export default function Dashboard() {
         for (const ds of days) {
           const isToday = ds === today.toISOString().split('T')[0]
           const existing = getCachedData(ds, ds)
-          if (existing?.orders && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); continue }
+          // Skip only if the day is fully cached: has orders AND has Meta data.
+          // Days synced during a Meta outage have orders but no campaigns — re-fetch those.
+          const hasMeta = existing && Array.isArray(existing.metaCampaigns) && existing.metaCampaigns.length > 0
+          const fullyCached = existing?.orders && hasMeta
+          if (fullyCached && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); continue }
           setMonthProgress({ done, total: days.length, day: ds })
           const [sr, mr] = await Promise.allSettled([
             fetchShopifyOrders(ds, ds),

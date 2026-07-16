@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { Target, Calendar, Plus, Trash2, ChevronLeft, RefreshCw, TrendingUp, AlertCircle, X, Check } from 'lucide-react'
 import { useDataStore } from '../lib/dataStore'
-import { calculateFullPnL, formatExact, getProductFamily, setFamilyAliases } from '../lib/profitEngine'
+import { calculateFullPnL, formatExact, getProductFamily } from '../lib/profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { newTargetId, targetKey, TARGETS_INDEX_KEY, dayCountBetween, buildTargetEconomics, solveCAC, perOrderBreakdown } from '../lib/targets'
 import { computeBaseline } from '../lib/baseline'
@@ -328,7 +328,6 @@ function TargetDetail({ target, onBack, onDelete, getCachedData, cache, ready })
     const dbP = getProducts()
     const campaignMap = buildCampaignMap(dbP)
     const vendorPriceMap = buildVendorPriceMap(dbP)
-    setFamilyAliases(dbP)
     let allOrders = [], allCampaigns = []
     const rows = []
     if (started) {

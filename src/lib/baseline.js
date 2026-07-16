@@ -1,6 +1,6 @@
 // Compute actual per-product metrics over a date range from the daily cache.
 // Used to auto-populate a target's baseline assumptions (AOV, mix, CAC).
-import { calculateFullPnL, setFamilyAliases } from './profitEngine'
+import { calculateFullPnL } from './profitEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from './productDB'
 
 const GST = 1.18
@@ -10,7 +10,6 @@ export function computeBaseline(getCachedData, start, end) {
   const dbP = getProducts()
   const campaignMap = buildCampaignMap(dbP)
   const vendorPriceMap = buildVendorPriceMap(dbP)
-  setFamilyAliases(dbP)
 
   let allOrders = [], allCampaigns = []
   let daysWithData = 0
