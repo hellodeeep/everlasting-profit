@@ -1,12 +1,34 @@
 import { findVendorPrice, detectBuyMultiplier, detectPackMultiplier, C2P_AMOUNT, COD_DELIVERY_RATE, COD_DISPATCH_RATE, LOGISTICS_COSTS, FEE_RATES } from './vendorPrices'
 
+// Configurable family aliases, built from the Product DB (name + matchPatterns).
+// Lets several distinct product titles roll up into one family — e.g. the 11
+// individual hair-clip designs that are only ever sold together as a "pack of 4".
+// Empty by default, so with nothing configured getProductFamily behaves exactly
+// as before. Callers set this from the product DB before computing P&L.
+let FAMILY_ALIASES = []
+
+export function setFamilyAliases(products) {
+  FAMILY_ALIASES = (products || [])
+    .filter(p => p && p.name && p.matchPatterns)
+    .map(p => ({
+      family: p.name,
+      patterns: String(p.matchPatterns).split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+    }))
+    .filter(a => a.patterns.length > 0)
+}
+
 export function getProductFamily(title) {
-  let name = title
+  const raw = title || ''
+  const lower = raw.toLowerCase()
+  for (const a of FAMILY_ALIASES) {
+    if (a.patterns.some(p => lower.includes(p))) return a.family
+  }
+  let name = raw
     .replace(/\s*-\s*(Gold|Silver|Rose Gold|Maroon|Gullabi|Blue|Black|White|Red|Pink|Green|Purple|Couple).*$/i, '')
     .replace(/\s*\/\s*.+$/, '')
     .replace(/\s*\(.*?\)/g, '')
     .trim()
-  if (!name) name = title.split(' - ')[0].split(' / ')[0].trim()
+  if (!name) name = raw.split(' - ')[0].split(' / ')[0].trim()
   return name
 }
 

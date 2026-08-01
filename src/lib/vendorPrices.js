@@ -72,13 +72,16 @@ export function findVendorPrice(title, customPrices = {}) {
   return 0
 }
 
-// Detect buy multiplier from title/variant
+// Detect buy multiplier from title/variant, e.g. "Buy 4 @2499" -> 4.
+// Anchored right after "buy" so it reads the bundle count, not the price.
 export function detectBuyMultiplier(title, variantTitle) {
   const combined = `${title} ${variantTitle || ''}`.toLowerCase()
-  const m3 = combined.match(/buy\s*3/i)
-  if (m3) return 3
-  const m2 = combined.match(/buy\s*2/i)
-  if (m2) return 2
+  const m = combined.match(/buy\s*(\d+)/)
+  if (m) {
+    const n = parseInt(m[1], 10)
+    // Sanity bounds: real bundles are small; anything huge is a mis-parse.
+    if (n >= 1 && n <= 50) return n
+  }
   return 1
 }
 
