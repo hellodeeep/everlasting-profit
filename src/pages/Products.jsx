@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Save, X, Edit2, Package, AlertTriangle, Search, Zap, Check } from 'lucide-react'
 import { getProducts, upsertProduct, deleteProduct } from '../lib/productDB'
-import { DEFAULT_VENDOR_PRICES } from '../lib/vendorPrices'
+import { DEFAULT_VENDOR_PRICES, findVendorPrice } from '../lib/vendorPrices'
 import { getProductFamily, setFamilyAliases } from '../lib/profitEngine'
 import { useDataStore } from '../lib/dataStore'
 
@@ -212,7 +212,14 @@ export default function Products() {
                           : <span className="flex items-center gap-1 text-xs text-yellow-600"><AlertTriangle size={10} /> Add code</span>
                         }
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-sm text-txt-secondary">{p.vendorPrice ? `₹${p.vendorPrice}` : '--'}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm">
+                        {(() => {
+                          const fallback = findVendorPrice(p.name, {})
+                          if (p.vendorPrice) return <span className="text-txt-secondary">₹{p.vendorPrice}</span>
+                          if (fallback) return <span className="text-txt-muted" title="Built-in default (not saved)">₹{fallback} <span className="text-[9px]">default</span></span>
+                          return <span className="text-cash-red text-xs">₹0 -- set price</span>
+                        })()}
+                      </td>
                       <td className="py-2.5 px-3 text-xs text-txt-muted max-w-[200px] truncate">{p.matchPatterns || '--'}</td>
                       <td className="py-2.5 px-3">
                         <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
