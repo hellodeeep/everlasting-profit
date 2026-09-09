@@ -116,6 +116,18 @@ export default async function handler(req, res) {
       } else out.nimbus.trackByAwb = 'no AWB on the Shopify fulfillment';
       out.nimbus.loginTokenPreview = String(t).slice(0, 12) + '...';
     }
+    // Try the V1 host with the login token in both header styles (API users may not need a separate key)
+    if (login.token) {
+      out.nimbus.v1WithLoginToken = {};
+      for (const [label, headers] of [['bearer', { Authorization: `Bearer ${login.token}` }], ['np-api-key', { 'NP-API-KEY': login.token }]]) {
+        const r = await fetch(NP_OLD + 'shipments?per_page=2', { headers });
+        const body = await r.json().catch(async () => ({ text: (await r.text()).slice(0, 300) }));
+        out.nimbus.v1WithLoginToken[label] = { status: r.status, body: cap(body, 3000) };
+      }
+      // Also the new host
+      const r2 = await npGet(login.token, 'shipments?per_page=2');
+      out.nimbus.v1WithLoginToken['api.nimbuspost.com/v1/shipments'] = { status: r2.status, body: cap(r2.body, 3000) };
+    }
     if (process.env.NIMBUS_API_KEY) {
       out.nimbus.v1 = {};
       const tries = [
