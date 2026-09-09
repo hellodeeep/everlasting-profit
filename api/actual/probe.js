@@ -1,6 +1,27 @@
 // Diagnostic: GET /api/actual/probe?order=EL12345&id=1234567890
 // Tries NimbusPost + Cashfree with several ID forms and returns raw responses.
 
+import { createClient } from '@supabase/supabase-js';
+
+async function getShopifyCredentials() {
+  if (process.env.SHOPIFY_STORE && process.env.SHOPIFY_ACCESS_TOKEN) {
+    return { store: process.env.SHOPIFY_STORE, token: process.env.SHOPIFY_ACCESS_TOKEN };
+  }
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (url && key) {
+    const sb = createClient(url, key);
+    const { data } = await sb.from('profit_settings').select('data').limit(1).single();
+    if (data?.data?.shopify_access_token) return { store: data.data.shopify_store || process.env.SHOPIFY_STORE, token: data.data.shopify_access_token };
+  }
+  return null;
+}
+
+async function shopifyGet(creds, path) {
+  const r = await fetch(`https://${creds.store}.myshopify.com/admin/api/2024-10/${path}`, { headers: { 'X-Shopify-Access-Token': creds.token } });
+  return { status: r.status, body: await r.json().catch(() => ({})) };
+}
+
 const NP = 'https://api.nimbuspost.com/v1/';
 const CF = 'https://api.cashfree.com/pg/';
 const NP_OLD = 'https://ship.nimbuspost.com/api/';
@@ -52,15 +73,47 @@ export default async function handler(req, res) {
     cashfree: !!process.env.CASHFREE_APP_ID && !!process.env.CASHFREE_SECRET_KEY,
   }, nimbus: {}, cashfree: {} };
 
+  // ---- Shopify: find order by name, pull transactions + fulfillments ----
+  let awbs = [], cfCandidates = [];
+  try {
+    const creds = await getShopifyCredentials();
+    if (creds && name) {
+      const found = await shopifyGet(creds, `orders.json?name=${encodeURIComponent(name)}&status=any&limit=1`);
+      const o = found.body?.orders?.[0];
+      if (!o) { out.shopify = { status: found.status, error: 'order not found by name', body: cap(found.body) }; }
+      else {
+        const tx = await shopifyGet(creds, `orders/${o.id}/transactions.json`);
+        awbs = (o.fulfillments || []).flatMap(f => f.tracking_number ? [f.tracking_number] : (f.tracking_numbers || []));
+        out.shopify = {
+          id: o.id, name: o.name, order_number: o.order_number, financial_status: o.financial_status, fulfillment_status: o.fulfillment_status,
+          gateway: o.gateway, payment_gateway_names: o.payment_gateway_names, total_price: o.total_price, tags: o.tags,
+          note_attributes: o.note_attributes,
+          fulfillments: (o.fulfillments || []).map(f => ({ status: f.status, shipment_status: f.shipment_status, tracking_company: f.tracking_company, tracking_number: f.tracking_number, tracking_numbers: f.tracking_numbers, tracking_url: f.tracking_url })),
+          refunds: (o.refunds || []).map(r => ({ id: r.id, created_at: r.created_at, note: r.note, transactions: (r.transactions || []).map(t => ({ kind: t.kind, amount: t.amount, gateway: t.gateway, status: t.status })) })),
+          transactions: (tx.body?.transactions || []).map(t => ({ kind: t.kind, status: t.status, gateway: t.gateway, amount: t.amount, authorization: t.authorization, receipt: cap(t.receipt, 1500), payment_id: t.payment_id })),
+        };
+        // Harvest possible Cashfree order ids from transactions
+        for (const t of (tx.body?.transactions || [])) {
+          if (t.authorization) cfCandidates.push(String(t.authorization));
+          if (t.payment_id) cfCandidates.push(String(t.payment_id));
+          const rc = t.receipt || {};
+          for (const k of ['order_id','orderId','cf_order_id','cfOrderId','x_order_id','order_token','reference','id','txnid']) if (rc[k]) cfCandidates.push(String(rc[k]));
+        }
+        for (const na of (o.note_attributes || [])) if (/cashfree|cf_|order/i.test(na.name)) cfCandidates.push(String(na.value));
+      }
+    } else if (!creds) out.shopify = { error: 'no shopify creds' };
+  } catch (e) { out.shopify = { error: e.message }; }
+
   // ---- NimbusPost ----
   try {
     const login = await npLogin();
     out.nimbus.login = { status: login.status, gotToken: !!login.token, raw: login.token ? undefined : login.raw };
     if (login.token) {
       const t = login.token;
-      if (awb) {
-        out.nimbus.trackByAwb = cap((await npGet(t, `shipments/track/${encodeURIComponent(awb)}`)).body);
-      }
+      const trackAwb = awb || awbs[0];
+      if (trackAwb) {
+        out.nimbus.trackByAwb = { awb: trackAwb, result: cap((await npGet(t, `shipments/track/${encodeURIComponent(trackAwb)}`)).body) };
+      } else out.nimbus.trackByAwb = 'no AWB on the Shopify fulfillment';
       out.nimbus.loginTokenPreview = String(t).slice(0, 12) + '...';
     }
     if (process.env.NIMBUS_API_KEY) {
@@ -82,7 +135,8 @@ export default async function handler(req, res) {
 
   // ---- Cashfree ----
   try {
-    const cands = [...new Set([name, '#' + name, id, `EL${name}`, `${name}`].filter(Boolean))];
+    const cands = [...new Set([...cfCandidates, name, id].filter(Boolean))];
+    out.cashfree.candidates = cands;
     out.cashfree.tries = {};
     for (const c of cands) {
       const r = await cfGet(`orders/${encodeURIComponent(c)}`);
