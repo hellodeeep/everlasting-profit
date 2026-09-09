@@ -59,7 +59,7 @@ export function calculateActualPnL(orders, tracking = {}, metaAllocation = {}, c
   if (productFilter) scoped = orders.filter(o => o.lineItems.some(i => famOf(i.title) === productFilter))
 
   // ---- per-order outcomes ----
-  const statusCounts = { delivered: 0, rto: 0, in_transit: 0, untracked: 0, unshipped: 0, lost: 0, cancelled: 0 }
+  const statusCounts = { delivered: 0, rto: 0, in_transit: 0, untracked: 0, unshipped: 0, lost: 0, cancelled: 0, fulfilledNoAwb: 0 }
   const byType = {
     prepaid: { orders: 0, collected: 0, refunded: 0, revenueFace: 0 },
     c2p: { orders: 0, collected: 0, refunded: 0, revenueFace: 0, delivered: 0, rto: 0, pending: 0 },
@@ -80,6 +80,7 @@ export function calculateActualPnL(orders, tracking = {}, metaAllocation = {}, c
   scoped.forEach(order => {
     const oc = orderOutcome(order, tracking)
     statusCounts[oc.norm] = (statusCounts[oc.norm] || 0) + 1
+    if (!oc.shipped && order.fulfillmentStatus === 'fulfilled') statusCounts.fulfilledNoAwb++
     const bt = byType[order.paymentType] || byType.cod
     bt.orders++; bt.refunded += oc.refunded; bt.revenueFace += order.totalPrice
     totalRefunded += oc.refunded

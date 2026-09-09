@@ -252,8 +252,9 @@ export default function Dashboard() {
           days.push(d.toISOString().split('T')[0])
         }
         let done = 0
-        for (const ds of days) {
-          const isToday = ds === today.toISOString().split('T')[0]
+        const todayStr = today.toISOString().split('T')[0]
+        const fetchDay = async (ds) => {
+          const isToday = ds === todayStr
           const existing = getCachedData(ds, ds)
           // Skip only if the day is fully cached: has orders AND has Meta data.
           // Days synced during a Meta outage have orders but no campaigns — re-fetch those.
@@ -261,22 +262,27 @@ export default function Dashboard() {
           // Days cached before v81 have no AWB/refund fields; reload them once so Actual mode works
           const hasShipFields = existing?.orders && (existing.orders.length === 0 || 'awbs' in existing.orders[0])
           const fullyCached = existing?.orders && hasMeta && hasShipFields
-          if (fullyCached && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); continue }
-          setMonthProgress({ done, total: days.length, day: ds })
+          if (fullyCached && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); return }
+          // Reuse existing Meta data when only shipment fields are missing (saves a Meta call per day)
+          const needMeta = !hasMeta || isToday
           const [sr, mr] = await Promise.allSettled([
             fetchShopifyOrders(ds, ds),
-            fetchMetaSpend(ds, ds),
+            needMeta ? fetchMetaSpend(ds, ds) : Promise.resolve(null),
           ])
           if (sr.status === 'rejected') throw new Error(`${ds}: ${sr.reason?.message || 'Shopify fetch failed'}`)
           const shopify = sr.value
-          let metaCampaigns = [], metaRawSpend = 0
-          if (mr.status === 'fulfilled' && mr.value) {
+          let metaCampaigns = existing?.metaCampaigns || [], metaRawSpend = existing?.metaRawSpend || 0
+          if (needMeta && mr.status === 'fulfilled' && mr.value) {
             metaCampaigns = mr.value.campaigns || []
             metaRawSpend = mr.value.summary?.totalSpend || 0
           }
           setCachedData(ds, ds, { orders: shopify.orders, metaCampaigns, metaRawSpend, apiMeta: shopify.meta })
           done++
           setMonthProgress({ done, total: days.length, day: ds })
+        }
+        // 3 days in flight at a time
+        for (let i = 0; i < days.length; i += 3) {
+          await Promise.all(days.slice(i, i + 3).map(fetchDay))
         }
         setMonthProgress(null)
       } catch (err) {
@@ -499,7 +505,8 @@ export default function Dashboard() {
               <span>C2P delivery rate: <strong className="text-txt-primary">{ap.metrics.c2pDeliveryRate != null ? (ap.metrics.c2pDeliveryRate * 100).toFixed(0) + '%' : '--'}</strong></span>
               <span>Revenue still in transit: <strong className="text-txt-primary">₹{formatExact(a.atStake)}</strong></span>
               <span>Freight is modelled (₹60 / ₹100 + ₹{a.cfg.rtoCharge} RTO) until the NimbusPost API key is added.</span>
-              {sc.untracked > 0 && <span className="text-cash-red">{sc.untracked} shipped orders have no tracking yet. Click Sync delivery status.</span>}
+              {sc.untracked > 0 && <span className="text-cash-red">{formatExact(sc.untracked)} shipped orders not yet checked with NimbusPost. Click Sync delivery status.</span>}
+              {sc.fulfilledNoAwb > 0 && <span className="text-cash-red">{formatExact(sc.fulfilledNoAwb)} orders are marked fulfilled in Shopify but have no AWB (shipped outside NimbusPost sync?).</span>}
             </div>
           </div>
         )
