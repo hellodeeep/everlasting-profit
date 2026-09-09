@@ -93,14 +93,14 @@ export default async function handler(req, res) {
   const sb = url && key ? createClient(url, key) : null;
 
   const results = {};
-  let cached = 0;
+  let cached = 0, tableMissingRead = false;
   let toTrack = awbs;
 
   if (sb && !force) {
     const { data, error } = await sb.from('shipment_tracking').select('*').in('awb', awbs);
-    if (error && !/relation .* does not exist/i.test(error.message)) {
-      return res.status(500).json({ error: 'Supabase read failed: ' + error.message });
-    }
+    const missing = error && /does not exist|could not find the table|schema cache/i.test(error.message);
+    if (error && !missing) return res.status(500).json({ error: 'Supabase read failed: ' + error.message });
+    if (missing) tableMissingRead = true;
     const stale = Date.now() - 6 * 60 * 60 * 1000; // re-check non-terminal rows older than 6h
     (data || []).forEach(row => {
       const fresh = row.terminal || (row.updated_at && new Date(row.updated_at).getTime() > stale);
@@ -128,11 +128,11 @@ export default async function handler(req, res) {
       }));
       if (rows.length) {
         const { error } = await sb.from('shipment_tracking').upsert(rows, { onConflict: 'awb' });
-        if (error) tableMissing = /relation .* does not exist/i.test(error.message) ? true : error.message;
+        if (error) tableMissing = /does not exist|could not find the table|schema cache/i.test(error.message) ? true : error.message;
       }
     }
   }
 
   return res.status(200).json({ results, tracked, cached, persisted: sb ? (tableMissing === false) : false,
-    warning: tableMissing === true ? 'shipment_tracking table missing: run supabase/migration_tracking.sql' : (typeof tableMissing === 'string' ? tableMissing : undefined) });
+    warning: (tableMissing === true || tableMissingRead) ? 'Tracking is not being saved: create the shipment_tracking table in Supabase (SQL in supabase/migration_tracking.sql)' : (typeof tableMissing === 'string' ? tableMissing : undefined) });
 }

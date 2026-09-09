@@ -258,7 +258,9 @@ export default function Dashboard() {
           // Skip only if the day is fully cached: has orders AND has Meta data.
           // Days synced during a Meta outage have orders but no campaigns — re-fetch those.
           const hasMeta = existing && Array.isArray(existing.metaCampaigns) && existing.metaCampaigns.length > 0
-          const fullyCached = existing?.orders && hasMeta
+          // Days cached before v81 have no AWB/refund fields; reload them once so Actual mode works
+          const hasShipFields = existing?.orders && (existing.orders.length === 0 || 'awbs' in existing.orders[0])
+          const fullyCached = existing?.orders && hasMeta && hasShipFields
           if (fullyCached && !isToday) { done++; setMonthProgress({ done, total: days.length, day: ds }); continue }
           setMonthProgress({ done, total: days.length, day: ds })
           const [sr, mr] = await Promise.allSettled([
