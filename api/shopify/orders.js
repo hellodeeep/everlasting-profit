@@ -103,7 +103,19 @@ export default async function handler(req, res) {
         financialStatus: order.financial_status,
         fulfillmentStatus: order.fulfillment_status,
         cancelled: isCancelled,
+        cancelledAt: order.cancelled_at || null,
         tags: order.tags || '',
+        // --- Actual-profit inputs ---
+        // AWBs from fulfillments (NimbusPost tracking numbers)
+        awbs: [...new Set((order.fulfillments || []).flatMap(f => {
+          if (f.status === 'cancelled') return [];
+          const list = Array.isArray(f.tracking_numbers) && f.tracking_numbers.length ? f.tracking_numbers : (f.tracking_number ? [f.tracking_number] : []);
+          return list.filter(Boolean).map(String);
+        }))],
+        fulfilledAt: (order.fulfillments || []).find(f => f.status === 'success')?.created_at || null,
+        // Money actually returned to the customer (successful refund transactions)
+        refunded: (order.refunds || []).reduce((s, r) =>
+          s + (r.transactions || []).filter(t => t.kind === 'refund' && t.status === 'success').reduce((a, t) => a + parseFloat(t.amount || 0), 0), 0),
         lineItems: (order.line_items || []).map(item => {
           const qty = item.quantity || 1;
           const unitPrice = parseFloat(item.price || 0);

@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
-import { RefreshCw, Calendar, AlertCircle, BarChart, ChevronDown, ChevronRight, ChevronLeft, X, Filter, AlertTriangle, Download, Clock, Check } from 'lucide-react'
-import { fetchShopifyOrders, fetchMetaSpend } from '../lib/api'
+import { RefreshCw, Calendar, AlertCircle, BarChart, ChevronDown, ChevronRight, ChevronLeft, X, Filter, AlertTriangle, Download, Clock, Check, Truck } from 'lucide-react'
+import { fetchShopifyOrders, fetchMetaSpend, trackAwbs } from '../lib/api'
 import { calculateFullPnL, formatINR, formatPercent, formatExact, setFamilyAliases } from '../lib/profitEngine'
+import { calculateActualPnL } from '../lib/actualEngine'
 import { getProducts, buildCampaignMap, buildVendorPriceMap, allocateMetaSpend } from '../lib/productDB'
 import { useDataStore } from '../lib/dataStore'
 
@@ -126,7 +127,9 @@ function exportCSV(pnl, dateLabel) {
 }
 
 export default function Dashboard() {
-  const { getCachedData, getAssembledRange, setCachedData, ready, syncing } = useDataStore()
+  const { getCachedData, getAssembledRange, setCachedData, getCacheByKey, setCacheByKey, ready, syncing } = useDataStore()
+  const [mode, setMode] = useState('expected')
+  const [trackProgress, setTrackProgress] = useState(null)
   const [preset, setPreset] = useState('today')
   const [customRange, setCustomRange] = useState({ since: '', until: '' })
   const [selectedMonth, setSelectedMonth] = useState(null)
@@ -166,15 +169,70 @@ export default function Dashboard() {
     return allocateMetaSpend(rawData.metaCampaigns, campaignMap)
   }, [rawData, campaignMap])
 
+  // Tracking keys mirror the order cache keys (per-day for months, single key otherwise)
+  const trackingKeys = useMemo(() => {
+    if (!dateRange.since) return []
+    if (preset !== 'month') return [`tracking_${dateRange.since}_${dateRange.until}`]
+    const keys = []
+    const d = new Date(dateRange.since + 'T00:00:00'), end = new Date(dateRange.until + 'T00:00:00')
+    while (d <= end) { const ds = d.toISOString().split('T')[0]; keys.push(`tracking_${ds}_${ds}`); d.setDate(d.getDate() + 1) }
+    return keys
+  }, [dateRange.since, dateRange.until, preset])
+
+  const trackingMap = useMemo(() => {
+    const m = {}
+    trackingKeys.forEach(k => { const e = getCacheByKey(k); if (e?.map) Object.assign(m, e.map) })
+    return m
+  }, [trackingKeys, getCacheByKey])
+
   const pnl = useMemo(() => {
     if (!rawData?.orders) return null
-    return calculateFullPnL(rawData.orders, metaAllocation, vendorPriceMap, productFilter)
-  }, [rawData, metaAllocation, vendorPriceMap, productFilter])
+    return mode === 'actual'
+      ? calculateActualPnL(rawData.orders, trackingMap, metaAllocation, vendorPriceMap, productFilter)
+      : calculateFullPnL(rawData.orders, metaAllocation, vendorPriceMap, productFilter)
+  }, [rawData, metaAllocation, vendorPriceMap, productFilter, mode, trackingMap])
 
   const allPnl = useMemo(() => {
     if (!rawData?.orders) return null
-    return calculateFullPnL(rawData.orders, metaAllocation, vendorPriceMap)
-  }, [rawData, metaAllocation, vendorPriceMap])
+    return mode === 'actual'
+      ? calculateActualPnL(rawData.orders, trackingMap, metaAllocation, vendorPriceMap)
+      : calculateFullPnL(rawData.orders, metaAllocation, vendorPriceMap)
+  }, [rawData, metaAllocation, vendorPriceMap, mode, trackingMap])
+
+  // Pull delivery status for every AWB in the current range (chunked, resumable, persisted per day)
+  const syncTracking = useCallback(async () => {
+    if (!rawData?.orders) return
+    setError(null)
+    // group orders by their cache key so each day's tracking map is stored alongside its orders
+    const groups = {}
+    if (preset === 'month') {
+      rawData.orders.forEach(o => { const ds = (o.createdAt || '').slice(0, 10); if (ds) (groups[`tracking_${ds}_${ds}`] ||= []).push(o) })
+    } else groups[`tracking_${dateRange.since}_${dateRange.until}`] = rawData.orders
+    const keys = Object.keys(groups)
+    const totalAwbs = rawData.orders.reduce((s, o) => s + (o.awbs?.length || 0), 0)
+    let done = 0, warning = null
+    setTrackProgress({ done: 0, total: totalAwbs, key: '' })
+    try {
+      for (const k of keys) {
+        const existing = getCacheByKey(k)?.map || {}
+        const map = { ...existing }
+        const awbs = [...new Set(groups[k].flatMap(o => o.awbs || []))]
+        const pending = awbs.filter(a => !map[a]?.terminal)
+        done += awbs.length - pending.length
+        for (let i = 0; i < pending.length; i += 250) {
+          const chunk = pending.slice(i, i + 250)
+          setTrackProgress({ done, total: totalAwbs, key: k.replace('tracking_', '').split('_')[0] })
+          const r = await trackAwbs(chunk)
+          Object.assign(map, r.results || {})
+          if (r.warning) warning = r.warning
+          done += chunk.length
+        }
+        setCacheByKey(k, { map })
+      }
+      if (warning) setError(warning)
+    } catch (e) { setError(e.message) }
+    finally { setTrackProgress(null) }
+  }, [rawData, preset, dateRange.since, dateRange.until, getCacheByKey, setCacheByKey])
 
   const fetchData = useCallback(async () => {
     if (!dateRange.since || !dateRange.until) return
@@ -375,6 +433,76 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Expected / Actual toggle */}
+      {rawData && (
+        <div className="glass-card p-3 flex items-center gap-2 flex-wrap">
+          <Truck size={16} className="text-txt-muted" />
+          {[['expected', 'Expected'], ['actual', 'Actual']].map(([k, label]) => (
+            <button key={k} onClick={() => setMode(k)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === k ? 'bg-accent text-white' : 'text-txt-muted hover:text-accent hover:bg-ev-light border border-brand-300/50'}`}>
+              {label}
+            </button>
+          ))}
+          <span className="text-[11px] text-txt-muted ml-1">
+            {mode === 'actual'
+              ? 'Real outcomes: refunds deducted, COD/C2P counted only when delivered, freight only on shipped orders'
+              : 'Model: COD/C2P at 30% delivery, freight at 70% dispatch'}
+          </span>
+          {mode === 'actual' && (
+            <button onClick={syncTracking} disabled={!!trackProgress || loading} className="btn-primary flex items-center gap-2 ml-auto text-xs">
+              <RefreshCw size={12} className={trackProgress ? 'animate-spin' : ''} />
+              {trackProgress ? `Tracking ${trackProgress.done}/${trackProgress.total}${trackProgress.key ? ' · ' + trackProgress.key : ''}` : 'Sync delivery status'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Actual-mode status */}
+      {mode === 'actual' && ap && (() => {
+        const a = ap.actual
+        const sc = a.statusCounts
+        const pct = Math.round(a.maturity * 100)
+        const final = a.maturity >= 0.95
+        return (
+          <div className={`glass-card p-4 ${final ? 'border-green-200' : 'border-yellow-200'}`}>
+            {!ap.hasAwbField && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-xs text-yellow-700">
+                This period was cached before shipment data was added. Click <strong>Refresh</strong> to reload orders with AWBs and refunds, then Sync delivery status.
+              </div>
+            )}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-accent">Delivery maturity</span>
+              <span className={`text-sm font-mono font-bold ${final ? 'text-cash-green' : 'text-yellow-600'}`}>
+                {pct}% of shipped COD/C2P resolved {final ? '· final' : '· still settling'}
+              </span>
+            </div>
+            <div className="w-full h-2.5 rounded-full bg-brand-200 overflow-hidden mb-3">
+              <div className={`h-2.5 rounded-full ${final ? 'bg-cash-green' : 'bg-yellow-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+            </div>
+            <div className="grid grid-cols-3 md:grid-cols-7 gap-3 text-center">
+              {[
+                ['Shipped', a.shippedOrders, 'text-txt-primary'],
+                ['Delivered', sc.delivered, 'text-cash-green'],
+                ['RTO', sc.rto, 'text-cash-red'],
+                ['In transit', sc.in_transit, 'text-yellow-600'],
+                ['Unshipped', sc.unshipped, 'text-txt-muted'],
+                ['Untracked', sc.untracked, sc.untracked ? 'text-cash-red' : 'text-txt-muted'],
+                ['Refunded', `₹${formatExact(ap.revenue.refunded)}`, 'text-cash-red'],
+              ].map(([l, v, c]) => (
+                <div key={l}><p className="text-[10px] text-txt-muted uppercase">{l}</p><p className={`text-base font-bold font-mono ${c}`}>{typeof v === 'number' ? formatExact(v) : v}</p></div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-[11px] text-txt-muted">
+              <span>COD delivery rate: <strong className="text-txt-primary">{ap.metrics.codDeliveryRate != null ? (ap.metrics.codDeliveryRate * 100).toFixed(0) + '%' : '--'}</strong> (model assumes 30%)</span>
+              <span>C2P delivery rate: <strong className="text-txt-primary">{ap.metrics.c2pDeliveryRate != null ? (ap.metrics.c2pDeliveryRate * 100).toFixed(0) + '%' : '--'}</strong></span>
+              <span>Revenue still in transit: <strong className="text-txt-primary">₹{formatExact(a.atStake)}</strong></span>
+              <span>Freight is modelled (₹60 / ₹100 + ₹{a.cfg.rtoCharge} RTO) until the NimbusPost API key is added.</span>
+              {sc.untracked > 0 && <span className="text-cash-red">{sc.untracked} shipped orders have no tracking yet. Click Sync delivery status.</span>}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Not cached notice */}
       {!isCached && dateRange.since && !loading && (
         <div className="glass-card p-3 bg-ev-light text-sm text-txt-muted flex items-center gap-2">
@@ -458,17 +586,17 @@ export default function Dashboard() {
 
           {/* Row 2: Revenue & Profit */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Stat label="Prepaid Revenue (incl. C2P)" value={`₹${formatExact(p.revenue.prepaidRevenueTotal)}`}
-              sub={`Prepaid: ₹${formatExact(p.revenue.prepaidRevenue)} + C2P: ₹${formatExact(p.revenue.c2pUpfront)}`} color="text-cash-green" />
-            <Stat label="COD Expected Revenue" value={`₹${formatExact(p.revenue.codRevenueExpected)}`}
-              sub="COD + C2P remaining at 30%" color="text-txt-muted" />
+            <Stat label={mode === 'actual' ? 'Prepaid Collected (net refunds)' : 'Prepaid Revenue (incl. C2P)'} value={`₹${formatExact(p.revenue.prepaidRevenueTotal)}`}
+              sub={mode === 'actual' ? `Refunded: ₹${formatExact(p.revenue.refunded || 0)}` : `Prepaid: ₹${formatExact(p.revenue.prepaidRevenue)} + C2P: ₹${formatExact(p.revenue.c2pUpfront)}`} color="text-cash-green" />
+            <Stat label={mode === 'actual' ? 'COD Delivered Revenue' : 'COD Expected Revenue'} value={`₹${formatExact(p.revenue.codRevenueExpected)}`}
+              sub={mode === 'actual' ? `In transit: ₹${formatExact(p.actual?.atStake || 0)}` : 'COD + C2P remaining at 30%'} color="text-txt-muted" />
             <Stat label="Meta Spend (incl. GST)" value={`₹${formatExact(p.expenses.metaAds)}`}
               sub={`Prepaid Rev / Ad Spend: ${p.metrics.prepaidToAdSpend > 0 ? (p.metrics.prepaidToAdSpend * 100).toFixed(0) + '%' : '--'}`}
               color={p.metrics.prepaidToAdSpend > 1.5 ? 'text-cash-green' : p.metrics.prepaidToAdSpend > 0 ? 'text-cash-red' : 'text-txt-muted'} />
-            <Stat label="Expected Profit" value={`₹${formatExact(p.profit.expected)}`}
+            <Stat label={mode === 'actual' ? 'Actual Profit' : 'Expected Profit'} value={`₹${formatExact(p.profit.expected)}`}
               sub={`${formatPercent(p.profit.margin)} margin | ₹${Math.round(p.profit.perOrder)}/order`}
               color={p.profit.expected >= 0 ? 'text-cash-green' : 'text-cash-red'} />
-            <Stat label="Expected Revenue" value={`₹${formatExact(p.revenue.expectedRevenue)}`}
+            <Stat label={mode === 'actual' ? 'Actual Revenue' : 'Expected Revenue'} value={`₹${formatExact(p.revenue.expectedRevenue)}`}
               sub={`COGS+Logistics: ₹${formatExact(p.expenses.cogs + p.expenses.logistics + p.expenses.totalFees)}`} />
           </div>
 
@@ -480,6 +608,34 @@ export default function Dashboard() {
             </button>
             {showPnL && (
               <div className="px-5 py-3 border-t border-brand-300/50">
+                {mode === 'actual' ? (<>
+                <div className="text-[10px] text-txt-muted uppercase tracking-wider mb-1">Income (collected)</div>
+                <PnLLine label={`Prepaid collected (${p.overview.prepaidOrders} orders)`} value={`₹${formatExact(p.actual.byType.prepaid.collected + p.actual.byType.prepaid.refunded)}`} indent />
+                <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.overview.c2pOrders * 150)}`} indent />
+                <PnLLine label={`C2P remainder on delivery (${p.actual.byType.c2p.delivered} delivered)`} value={`₹${formatExact(Math.max(0, p.actual.byType.c2p.collected + p.actual.byType.c2p.refunded - p.overview.c2pOrders * 150))}`} indent />
+                <PnLLine label={`COD on delivery (${p.actual.byType.cod.delivered} of ${p.overview.codOrders} delivered)`} value={`₹${formatExact(p.actual.byType.cod.collected)}`} indent />
+                <PnLLine label="Refunds" value={`-₹${formatExact(p.revenue.refunded)}`} indent />
+                <PnLLine label="Actual Revenue" value={`₹${formatExact(p.revenue.actualRevenue)}`} bold />
+                {p.actual.atStake > 0 && <p className="ml-6 text-[11px] text-yellow-600 mt-1">₹{formatExact(p.actual.atStake)} more is still in transit ({p.actual.byType.cod.pending + p.actual.byType.c2p.pending} COD/C2P orders not yet delivered or returned)</p>}
+                <div className="text-[10px] text-txt-muted uppercase tracking-wider mt-3 mb-1">Expenses</div>
+                <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
+                <PnLLine label={`COGS (shipped units)`} value={`-₹${formatExact(p.expenses.cogs)}`} indent />
+                <p className="ml-6 text-[11px] text-txt-muted">of which ₹{formatExact(p.expenses.cogsRto)} went out on orders that returned (RTO). Unshipped orders excluded: ₹{formatExact(p.expenses.cogsUnshipped)}.</p>
+                {p.unpriced?.units > 0 && (
+                  <div className="ml-6 my-1.5 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-xs text-yellow-700">
+                    COGS missing: {formatExact(p.unpriced.units)} units had no vendor price. Top: {p.unpriced.families.slice(0, 5).map(f => f.name).join(', ')}
+                  </div>
+                )}
+                <PnLLine label={`Boxes (${p.overview.shippedOrders} shipped x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
+                <PnLLine label="Warranty Card (shipped)" value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
+                <PnLLine label="Free Ring (prepaid shipped x ₹17.51)" value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
+                <PnLLine label="Packing Bags (shipped)" value={`-₹${formatExact(p.expenses.packingBags)}`} indent />
+                <PnLLine label={`Forward shipping (${p.overview.shippedOrders} shipped: ₹60 prepaid / ₹100 COD)`} value={`-₹${formatExact(p.expenses.shipping)}`} indent />
+                <PnLLine label={`RTO charges (${p.overview.rtoOrders} returns x ₹${p.actual.cfg.rtoCharge})`} value={`-₹${formatExact(p.expenses.rtoCharges)}`} indent />
+                <PnLLine label="Cashfree (1.34% of net collection)" value={`-₹${formatExact(p.expenses.cashfree)}`} indent />
+                <PnLLine label="Engage" value={`-₹${formatExact(p.expenses.engage)}`} indent />
+                <PnLLine label="Checkout (Fastrr)" value={`-₹${formatExact(p.expenses.checkout)}`} indent />
+                </>) : (<>
                 <div className="text-[10px] text-txt-muted uppercase tracking-wider mb-1">Income</div>
                 <PnLLine label="Prepaid (Cashfree)" value={`₹${formatExact(p.revenue.prepaidRevenue)}`} indent />
                 <PnLLine label={`C2P upfront (${p.overview.c2pOrders} x ₹150)`} value={`₹${formatExact(p.revenue.c2pUpfront)}`} indent />
@@ -509,9 +665,10 @@ export default function Dashboard() {
                 <PnLLine label="Cashfree (1.34%)" value={`-₹${formatExact(p.expenses.cashfree)}`} indent />
                 <PnLLine label="Engage" value={`-₹${formatExact(p.expenses.engage)}`} indent />
                 <PnLLine label="Checkout (Fastrr)" value={`-₹${formatExact(p.expenses.checkout)}`} indent />
+                </>)}
                 <PnLLine label="Total Expenses" value={`-₹${formatExact(p.expenses.total)}`} bold />
                 <div className="mt-2" />
-                <PnLLine label="EXPECTED PROFIT" value={`${p.profit.expected < 0 ? '-' : ''}₹${formatExact(Math.abs(p.profit.expected))}`} bold />
+                <PnLLine label={mode === 'actual' ? 'ACTUAL PROFIT' : 'EXPECTED PROFIT'} value={`${p.profit.expected < 0 ? '-' : ''}₹${formatExact(Math.abs(p.profit.expected))}`} bold />
                 <PnLLine label="Margin %" value={formatPercent(p.profit.margin)} />
                 <PnLLine label="Per Order" value={`₹${Math.round(p.profit.perOrder)}`} />
               </div>
@@ -533,9 +690,9 @@ export default function Dashboard() {
                       <th className="py-2.5 px-2 text-right">Prepaid%</th>
                       <th className="py-2.5 px-2 text-right">C2P%</th>
                       <th className="py-2.5 px-2 text-right">COD%</th>
-                      <th className="py-2.5 px-2 text-right">P.AOV</th>
-                      <th className="py-2.5 px-2 text-right">C2P.AOV</th>
-                      <th className="py-2.5 px-2 text-right">COD.AOV</th>
+                      <th className="py-2.5 px-2 text-right">{mode === 'actual' ? 'Deliv.' : 'P.AOV'}</th>
+                      <th className="py-2.5 px-2 text-right">{mode === 'actual' ? 'RTO' : 'C2P.AOV'}</th>
+                      <th className="py-2.5 px-2 text-right">{mode === 'actual' ? 'Del %' : 'COD.AOV'}</th>
                       <th className="py-2.5 px-2 text-right">Prepaid Rev</th>
                       <th className="py-2.5 px-2 text-right">COD Rev</th>
                       <th className="py-2.5 px-2 text-right">Meta ₹</th>
@@ -560,9 +717,15 @@ export default function Dashboard() {
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{(prod.prepaidPct*100).toFixed(0)}%</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-yellow-600">{(prod.c2pPct*100).toFixed(0)}%</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">{(prod.codPct*100).toFixed(0)}%</td>
+                        {mode === 'actual' ? (<>
+                        <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">{prod.deliveredCount ?? '--'}</td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.rtoCount > 0 ? 'text-cash-red' : 'text-txt-muted'}`}>{prod.rtoCount ?? '--'}</td>
+                        <td className={`py-2.5 px-2 text-right font-mono text-xs ${prod.deliveryRate == null ? 'text-txt-muted' : prod.deliveryRate >= 0.5 ? 'text-cash-green' : 'text-cash-red'}`}>{prod.deliveryRate == null ? '--' : `${Math.round(prod.deliveryRate * 100)}%`}</td>
+                        </>) : (<>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovPrepaid > 0 ? `₹${formatExact(prod.aovPrepaid)}` : '--'}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovC2p > 0 ? `₹${formatExact(prod.aovC2p)}` : '--'}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-secondary">{prod.aovCod > 0 ? `₹${formatExact(prod.aovCod)}` : '--'}</td>
+                        </>)}
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-cash-green">₹{formatExact(prod.prepaidRevenueTotal)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(prod.codRevenueExpected)}</td>
                         <td className="py-2.5 px-2 text-right font-mono text-xs text-txt-muted">
@@ -590,9 +753,15 @@ export default function Dashboard() {
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{(ap.overview.prepaidRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-yellow-600">{(ap.overview.c2pRate*100).toFixed(0)}%</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{(ap.overview.codRate*100).toFixed(0)}%</td>
+                      {mode === 'actual' ? (<>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">{ap.overview.deliveredOrders}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-red">{ap.overview.rtoOrders}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">{ap.metrics.codDeliveryRate != null ? Math.round(ap.metrics.codDeliveryRate * 100) + '%' : '--'}</td>
+                      </>) : (<>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovPrepaid)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovC2p)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.metrics.aovCod)}</td>
+                      </>)}
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold text-cash-green">₹{formatExact(ap.revenue.prepaidRevenueTotal)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.revenue.codRevenueExpected)}</td>
                       <td className="py-2.5 px-2 text-right font-mono text-xs font-bold">₹{formatExact(ap.expenses.metaAds)}</td>

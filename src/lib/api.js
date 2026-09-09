@@ -17,3 +17,15 @@ export async function fetchMetaSpend(since, until) {
   }
   return res.json()
 }
+
+export async function trackAwbs(awbs, force = false) {
+  const res = await fetch(`${BASE}/api/actual/track`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ awbs, force }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || 'Tracking failed')
+  }
+  return res.json()
+}
