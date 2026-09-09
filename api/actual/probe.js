@@ -3,6 +3,14 @@
 
 const NP = 'https://api.nimbuspost.com/v1/';
 const CF = 'https://api.cashfree.com/pg/';
+const NP_OLD = 'https://ship.nimbuspost.com/api/';
+
+// V1 (ship.nimbuspost.com) uses the panel API key, not the login token
+async function npOldGet(path) {
+  const r = await fetch(NP_OLD + path, { headers: { 'NP-API-KEY': process.env.NIMBUS_API_KEY } });
+  const j = await r.json().catch(async () => ({ text: (await r.text()).slice(0, 500) }));
+  return { status: r.status, body: j };
+}
 
 async function npLogin() {
   const r = await fetch(NP + 'users/login', {
@@ -36,10 +44,11 @@ const cap = (o, n = 6000) => { const s = JSON.stringify(o); return s.length > n 
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const { order = '', id = '' } = req.query;
+  const { order = '', id = '', awb = '' } = req.query;
   const name = String(order).replace(/^#/, '');
   const out = { input: { order, id }, env: {
     nimbus: !!process.env.NIMBUS_EMAIL && !!process.env.NIMBUS_PASSWORD,
+    nimbusApiKey: !!process.env.NIMBUS_API_KEY,
     cashfree: !!process.env.CASHFREE_APP_ID && !!process.env.CASHFREE_SECRET_KEY,
   }, nimbus: {}, cashfree: {} };
 
@@ -49,19 +58,25 @@ export default async function handler(req, res) {
     out.nimbus.login = { status: login.status, gotToken: !!login.token, raw: login.token ? undefined : login.raw };
     if (login.token) {
       const t = login.token;
+      if (awb) {
+        out.nimbus.trackByAwb = cap((await npGet(t, `shipments/track/${encodeURIComponent(awb)}`)).body);
+      }
+      out.nimbus.loginTokenPreview = String(t).slice(0, 12) + '...';
+    }
+    if (process.env.NIMBUS_API_KEY) {
+      out.nimbus.v1 = {};
       const tries = [
         `shipments?order_id=${encodeURIComponent(name)}`,
         `shipments?order_number=${encodeURIComponent(name)}`,
-        `shipments?order_id=${encodeURIComponent('#' + name)}`,
         `orders?order_id=${encodeURIComponent(name)}`,
-        `orders?order_number=${encodeURIComponent(name)}`,
-        `shipments?per_page=5`,
+        `shipments?per_page=3`,
       ];
-      out.nimbus.tries = {};
       for (const p of tries) {
-        const r = await npGet(t, p);
-        out.nimbus.tries[p] = { status: r.status, body: cap(r.body) };
+        const r = await npOldGet(p);
+        out.nimbus.v1[p] = { status: r.status, body: cap(r.body) };
       }
+    } else {
+      out.nimbus.v1 = 'NIMBUS_API_KEY not set (needed for shipment list + freight charges)';
     }
   } catch (e) { out.nimbus.error = e.message; }
 
