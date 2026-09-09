@@ -33,6 +33,21 @@ export function getProductFamily(title) {
 }
 
 export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices = {}, productFilter = null) {
+  // Per-title memo: product titles repeat thousands of times across a month,
+  // so resolve family / vendor price once per distinct title, not per line item.
+  const famCache = new Map()
+  const famOf = (title) => {
+    let f = famCache.get(title)
+    if (f === undefined) { f = getProductFamily(title); famCache.set(title, f) }
+    return f
+  }
+  const priceCache = new Map()
+  const priceOf = (title) => {
+    let v = priceCache.get(title)
+    if (v === undefined) { v = findVendorPrice(title, customVendorPrices); priceCache.set(title, v) }
+    return v
+  }
+
   const allOrders = orders
   // Don't filter cancelled - the 50% COD delivery rate and 70% dispatch rate already account for cancellations
   const cancelledCount = allOrders.filter(o => o.cancelled).length
@@ -40,7 +55,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   let activeOrders = allOrders
   if (productFilter) {
     activeOrders = allOrders.filter(o =>
-      o.lineItems.some(i => getProductFamily(i.title) === productFilter)
+      o.lineItems.some(i => famOf(i.title) === productFilter)
     )
   }
 
@@ -56,7 +71,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     activeOrders.forEach(o => {
       const orderLineTotal = o.lineItems.reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
       const productLineTotal = o.lineItems
-        .filter(i => getProductFamily(i.title) === productFilter)
+        .filter(i => famOf(i.title) === productFilter)
         .reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
       const share = orderLineTotal > 0 ? productLineTotal / orderLineTotal : 0
       const rev = o.totalPrice * share
@@ -99,18 +114,22 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
   const productMap = {}
   const orderDetails = []
 
+  // Track items that resolved to Rs.0 vendor price so the UI can show how much COGS is missing
+  const unpriced = {}
+  let unpricedUnits = 0, unpricedRevenue = 0
+
   activeOrders.forEach(order => {
     let orderCOGS = 0
     const processedItems = []
     const items = productFilter
-      ? order.lineItems.filter(i => getProductFamily(i.title) === productFilter)
+      ? order.lineItems.filter(i => famOf(i.title) === productFilter)
       : order.lineItems
 
     // Calculate proportional revenue share for each line item
     const orderLineTotal = order.lineItems.reduce((s, i) => s + (parseFloat(i.price) * i.quantity), 0)
 
     items.forEach(item => {
-      const vendorPrice = findVendorPrice(item.title, customVendorPrices)
+      const vendorPrice = priceOf(item.title)
       const buyMult = detectBuyMultiplier(item.title, item.variantTitle)
       const packMult = detectPackMultiplier(item.title, item.variantTitle)
       const totalUnits = item.quantity * buyMult
@@ -122,7 +141,14 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       const share = orderLineTotal > 0 ? itemRawTotal / orderLineTotal : 0
       const proportionalRevenue = order.totalPrice * share
 
-      const family = getProductFamily(item.title)
+      const family = famOf(item.title)
+      if (vendorPrice === 0 && itemRawTotal > 0) {
+        unpricedUnits += totalUnits
+        unpricedRevenue += proportionalRevenue
+        if (!unpriced[family]) unpriced[family] = { name: family, units: 0, revenue: 0 }
+        unpriced[family].units += totalUnits
+        unpriced[family].revenue += proportionalRevenue
+      }
       const variantKey = item.variantTitle
         ? `${item.title.split(' - ')[0].trim()} [${item.variantTitle}]`
         : item.title
@@ -184,59 +210,55 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     }
   })
 
-  // ====== UPSELL ANALYSIS ======
+  // ====== UPSELL ANALYSIS (single pass) ======
   const UPSELL_PATTERNS = ['premium gift box', 'gift wrap', '5 in 1 gift box']
-  const isUpsellItem = (title) => UPSELL_PATTERNS.some(p => title.toLowerCase().includes(p))
+  const isUpsellFamily = (f) => UPSELL_PATTERNS.some(p => f.toLowerCase().includes(p))
+  const upsellCache = new Map()
+  const isUpsellItem = (title) => {
+    let v = upsellCache.get(title)
+    if (v === undefined) { const l = title.toLowerCase(); v = UPSELL_PATTERNS.some(p => l.includes(p)); upsellCache.set(title, v) }
+    return v
+  }
 
-  // For each product family, analyze upsell attach rate and AOV impact
-  const upsellAnalysis = {}
-  const heroFamilies = Object.keys(productMap).filter(f => !UPSELL_PATTERNS.some(p => f.toLowerCase().includes(p)))
-
-  heroFamilies.forEach(family => {
-    const ordersWithHero = []
-
-    activeOrders.forEach(order => {
-      const hasHero = order.lineItems.some(i => getProductFamily(i.title) === family)
-      if (!hasHero) return
-
-      const upsellItems = order.lineItems.filter(i => isUpsellItem(i.title))
-      const hasUpsell = upsellItems.length > 0
-      const upsellRevenue = upsellItems.reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
-
-      ordersWithHero.push({
-        id: order.id, name: order.name, total: order.totalPrice,
-        paymentType: order.paymentType, hasUpsell, upsellRevenue,
-        items: order.lineItems.map(i => ({ title: i.title, qty: i.quantity, price: parseFloat(i.price) })),
-      })
+  const perFamily = {}  // family -> { orders: [], totalOrderValue, totalUpsellRevenue, withBox }
+  activeOrders.forEach(order => {
+    const upsellItems = order.lineItems.filter(i => isUpsellItem(i.title))
+    const hasUpsell = upsellItems.length > 0
+    const upsellRevenue = upsellItems.reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
+    // One shared summary object per order, referenced by every hero family in it
+    const summary = {
+      id: order.id, name: order.name, total: order.totalPrice,
+      paymentType: order.paymentType, hasUpsell, upsellRevenue,
+      items: order.lineItems.map(i => ({ title: i.title, qty: i.quantity, price: parseFloat(i.price) })),
+    }
+    const fams = new Set(order.lineItems.map(i => famOf(i.title)).filter(f => f && !isUpsellFamily(f)))
+    fams.forEach(f => {
+      if (!perFamily[f]) perFamily[f] = { orders: [], totalOrderValue: 0, totalUpsellRevenue: 0, withBox: 0 }
+      const pf = perFamily[f]
+      pf.orders.push(summary)
+      pf.totalOrderValue += order.totalPrice
+      pf.totalUpsellRevenue += upsellRevenue
+      if (hasUpsell) pf.withBox++
     })
+  })
 
-    if (ordersWithHero.length === 0) return
-
-    const totalOrderValue = ordersWithHero.reduce((s, o) => s + o.total, 0)
-    const totalUpsellRevenue = ordersWithHero.reduce((s, o) => s + o.upsellRevenue, 0)
-    const ordersWithBox = ordersWithHero.filter(o => o.hasUpsell)
-    const ordersWithoutBox = ordersWithHero.filter(o => !o.hasUpsell)
-    const n = ordersWithHero.length
-
-    // AOV current = total order value / orders (includes gift box revenue)
-    // AOV without gift box = (total order value - all gift box revenue) / orders
-    const aovCurrent = totalOrderValue / n
-    const aovWithoutBox = (totalOrderValue - totalUpsellRevenue) / n
-    const aovLiftAmount = totalUpsellRevenue / n  // gift box adds this much per order on average
-
+  const upsellAnalysis = {}
+  Object.entries(perFamily).forEach(([family, pf]) => {
+    const n = pf.orders.length
+    if (n === 0) return
+    const aovCurrent = pf.totalOrderValue / n
+    const aovWithoutBox = (pf.totalOrderValue - pf.totalUpsellRevenue) / n
+    const aovLiftAmount = pf.totalUpsellRevenue / n
     upsellAnalysis[family] = {
       totalOrders: n,
-      withUpsellCount: ordersWithBox.length,
-      withoutUpsellCount: ordersWithoutBox.length,
-      attachRate: ordersWithBox.length / n,
-      aovCurrent,
-      aovWithoutBox,
-      aovLiftAmount,
+      withUpsellCount: pf.withBox,
+      withoutUpsellCount: n - pf.withBox,
+      attachRate: pf.withBox / n,
+      aovCurrent, aovWithoutBox, aovLiftAmount,
       aovLiftPct: aovWithoutBox > 0 ? aovLiftAmount / aovWithoutBox : 0,
-      totalUpsellRevenue,
-      avgUpsellPerBoxOrder: ordersWithBox.length > 0 ? totalUpsellRevenue / ordersWithBox.length : 0,
-      // Order details for drill-down
-      orders: ordersWithHero,
+      totalUpsellRevenue: pf.totalUpsellRevenue,
+      avgUpsellPerBoxOrder: pf.withBox > 0 ? pf.totalUpsellRevenue / pf.withBox : 0,
+      orders: pf.orders,
     }
   })
 
@@ -333,7 +355,7 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       variants: Object.values(p.variants).sort((a, b) => b.revenue - a.revenue) }
   }).sort((a, b) => b.revenue - a.revenue)
 
-  const allFamilies = [...new Set(allOrders.flatMap(o => o.lineItems.map(i => getProductFamily(i.title))))].sort()
+  const allFamilies = [...new Set(allOrders.flatMap(o => o.lineItems.map(i => famOf(i.title))))].sort()
 
   return {
     overview: { totalOrders: allOrders.length, boxOrders: nAllForBoxes,
@@ -367,6 +389,8 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
       prepaidToAdSpend: metaSpendForView > 0 ? (prepaidRevenue + c2pUpfront) / metaSpendForView : 0 },
     products, orderDetails, allFamilies,
     metaAllocation, upsellAnalysis,
+    unpriced: { units: unpricedUnits, revenue: unpricedRevenue,
+      families: Object.values(unpriced).sort((a, b) => b.revenue - a.revenue) },
   }
 }
 

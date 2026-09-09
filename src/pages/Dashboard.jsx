@@ -489,6 +489,18 @@ export default function Dashboard() {
                 <div className="text-[10px] text-txt-muted uppercase tracking-wider mt-3 mb-1">Expenses</div>
                 <PnLLine label="Meta Ads (incl. 18% GST)" value={`-₹${formatExact(p.expenses.metaAds)}`} indent />
                 <PnLLine label="COGS (Vendor)" value={`-₹${formatExact(p.expenses.cogs)}`} indent />
+                {p.unpriced?.units > 0 && (
+                  <div className="ml-6 my-1.5 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-xs">
+                    <div className="flex justify-between text-yellow-700">
+                      <span className="font-medium">COGS missing: {formatExact(p.unpriced.units)} units had no vendor price (₹{formatExact(p.unpriced.revenue)} revenue)</span>
+                      <span className="text-yellow-600">profit is overstated by their real cost</span>
+                    </div>
+                    <div className="mt-1 text-yellow-600">
+                      Top unpriced: {p.unpriced.families.slice(0, 6).map(f => `${f.name} (${formatExact(f.units)})`).join(', ')}
+                      {p.unpriced.families.length > 6 && ` +${p.unpriced.families.length - 6} more`}
+                    </div>
+                  </div>
+                )}
                 <PnLLine label={`Boxes (${p.overview.boxOrders || p.overview.totalOrders} orders x ₹34.3)`} value={`-₹${formatExact(p.expenses.boxes)}`} indent />
                 <PnLLine label="Warranty Card (prepaid + COD@70%)" value={`-₹${formatExact(p.expenses.warrantyCard)}`} indent />
                 <PnLLine label={`Free Ring (${p.overview.prepaidOrders} prepaid x ₹17.51)`} value={`-₹${formatExact(p.expenses.freeRing)}`} indent />
