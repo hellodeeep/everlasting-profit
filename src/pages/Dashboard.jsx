@@ -609,6 +609,51 @@ export default function Dashboard() {
               sub={`COGS+Logistics: ₹${formatExact(p.expenses.cogs + p.expenses.logistics + p.expenses.totalFees)}`} />
           </div>
 
+          {/* Profit by Product (coded products only) */}
+          {!productFilter && ap && (() => {
+            const coded = ap.products.filter(pr => pr.hasCampaignCode)
+            if (coded.length === 0) return null
+            const ranked = [...coded].sort((a, b) => b.profit - a.profit)
+            const totalProfit = ranked.reduce((s, x) => s + x.profit, 0)
+            const maxAbs = Math.max(1, ...ranked.map(x => Math.abs(x.profit)))
+            const codedProfit = totalProfit
+            const codedRevenue = ranked.reduce((s, x) => s + x.revenue, 0)
+            const codedMeta = ranked.reduce((s, x) => s + x.metaSpend, 0)
+            return (
+              <div className="glass-card overflow-hidden">
+                <div className="px-5 py-3 border-b border-brand-300/50 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-accent">Profit by Product</h3>
+                  <span className="text-[11px] text-txt-muted">{ranked.length} coded products · total {mode === 'actual' ? 'actual' : 'expected'} profit ₹{formatExact(codedProfit)}</span>
+                </div>
+                <div className="p-3 space-y-1.5">
+                  {ranked.map(pr => {
+                    const share = codedProfit > 0 ? pr.profit / codedProfit : 0
+                    const pos = pr.profit >= 0
+                    return (
+                      <button key={pr.name} onClick={() => setProductFilter(pr.name)}
+                        className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-ev-light transition-colors text-left">
+                        <span className="text-xs font-medium text-txt-primary w-44 shrink-0 truncate">{pr.name}</span>
+                        <span className="text-[10px] font-mono text-txt-muted w-10 shrink-0">{pr.orderCount}</span>
+                        <div className="flex-1 h-4 rounded bg-brand-100 overflow-hidden relative">
+                          <div className={`h-4 ${pos ? 'bg-cash-green/70' : 'bg-cash-red/70'}`} style={{ width: `${Math.max(2, Math.abs(pr.profit) / maxAbs * 100)}%` }} />
+                        </div>
+                        <span className={`text-xs font-mono font-bold w-24 text-right shrink-0 ${pos ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(pr.profit)}</span>
+                        <span className="text-[10px] font-mono text-txt-muted w-12 text-right shrink-0">{(share * 100).toFixed(0)}%</span>
+                        <span className={`text-[10px] font-mono w-14 text-right shrink-0 ${pr.margin >= 0.2 ? 'text-cash-green' : pr.margin >= 0 ? 'text-yellow-600' : 'text-cash-red'}`}>{formatPercent(pr.margin)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="px-5 py-2.5 border-t border-brand-300/50 bg-ev-light flex items-center gap-6 text-[11px] text-txt-muted">
+                  <span>Coded revenue: <strong className="text-txt-primary font-mono">₹{formatExact(codedRevenue)}</strong></span>
+                  <span>Coded Meta spend: <strong className="text-txt-primary font-mono">₹{formatExact(codedMeta)}</strong></span>
+                  <span>Coded profit: <strong className={`font-mono ${codedProfit >= 0 ? 'text-cash-green' : 'text-cash-red'}`}>₹{formatExact(codedProfit)}</strong></span>
+                  <span className="ml-auto">Bars = profit size · click a row to drill in</span>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* P&L */}
           <div className="glass-card overflow-hidden">
             <button onClick={() => setShowPnL(!showPnL)} className="w-full px-5 py-3 flex items-center justify-between hover:bg-ev-light">
