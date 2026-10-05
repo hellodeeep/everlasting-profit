@@ -836,21 +836,21 @@ export default function Dashboard() {
           {ap && ap.upsellAnalysis && Object.keys(ap.upsellAnalysis).length > 0 && !productFilter && (
             <div className="glass-card overflow-hidden">
               <div className="px-5 py-3 border-b border-brand-300/50">
-                <h3 className="text-sm font-semibold text-accent">Gift Box Upsell Performance</h3>
-                <p className="text-[10px] text-txt-muted mt-0.5">AOV = all orders with this product / order count. "Without Box" subtracts gift box revenue from the same orders. Lift = what the gift box adds per order on average.</p>
+                <h3 className="text-sm font-semibold text-accent">Add-on Performance</h3>
+                <p className="text-[10px] text-txt-muted mt-0.5">Attach rate = orders that added any add-on (gift box, jhumka box...) / total orders of that product. Lift = extra AOV those add-ons create per order. Click a product to see each add-on separately.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left whitespace-nowrap">
                   <thead><tr className="border-b border-brand-300/50 text-[10px] text-txt-muted uppercase tracking-wider">
                     <th className="py-2.5 px-3">Product</th>
                     <th className="py-2.5 px-2 text-right">Orders</th>
-                    <th className="py-2.5 px-2 text-right">Bought Box</th>
+                    <th className="py-2.5 px-2 text-right">Bought Add-on</th>
                     <th className="py-2.5 px-2 text-right">Attach Rate</th>
                     <th className="py-2.5 px-2 text-right">AOV (current)</th>
-                    <th className="py-2.5 px-2 text-right">AOV (w/o box)</th>
+                    <th className="py-2.5 px-2 text-right">AOV (w/o add-on)</th>
                     <th className="py-2.5 px-2 text-right">Lift / Order</th>
                     <th className="py-2.5 px-2 text-right">Lift %</th>
-                    <th className="py-2.5 px-2 text-right">Box Revenue</th>
+                    <th className="py-2.5 px-2 text-right">Add-on Revenue</th>
                   </tr></thead>
                   <tbody>
                     {Object.entries(ap.upsellAnalysis).map(([family, u]) => (
@@ -919,6 +919,35 @@ export default function Dashboard() {
                     <p className="text-[10px] text-txt-muted mt-1">Avg ₹{formatExact(u.avgUpsellPerBoxOrder)}/box order</p>
                   </div>
                 </div>
+
+                {/* Per add-on breakdown */}
+                {u.addons && u.addons.length > 0 && (
+                  <div className="px-5 py-3 border-t border-brand-300/50">
+                    <p className="text-[11px] text-txt-muted uppercase tracking-wider mb-2">Each add-on on {productFilter} orders</p>
+                    <table className="w-full text-left">
+                      <thead><tr className="text-[10px] text-txt-muted uppercase">
+                        <th className="py-1.5 pr-3">Add-on</th>
+                        <th className="py-1.5 px-2 text-right">Orders added</th>
+                        <th className="py-1.5 px-2 text-right">Attach rate</th>
+                        <th className="py-1.5 px-2 text-right">Add-on revenue</th>
+                        <th className="py-1.5 px-2 text-right">AOV lift / order</th>
+                        <th className="py-1.5 px-2 text-right">Avg per attached</th>
+                      </tr></thead>
+                      <tbody>
+                        {u.addons.map(a => (
+                          <tr key={a.key} className="border-t border-brand-300/30">
+                            <td className="py-2 pr-3 text-sm text-txt-primary font-medium">{a.label}</td>
+                            <td className="py-2 px-2 text-right font-mono text-xs text-cash-green font-bold">{formatExact(a.count)}</td>
+                            <td className={`py-2 px-2 text-right font-mono text-xs font-bold ${a.attachRate >= 0.2 ? 'text-cash-green' : a.attachRate >= 0.1 ? 'text-yellow-600' : 'text-txt-muted'}`}>{(a.attachRate * 100).toFixed(1)}%</td>
+                            <td className="py-2 px-2 text-right font-mono text-xs text-txt-primary">₹{formatExact(a.revenue)}</td>
+                            <td className="py-2 px-2 text-right font-mono text-xs text-cash-green font-bold">+₹{formatExact(a.aovLiftAmount)}</td>
+                            <td className="py-2 px-2 text-right font-mono text-xs text-txt-muted">₹{formatExact(a.avgPerAttached)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Order-level drill-down */}
                 <div className="overflow-x-auto max-h-[400px] overflow-y-auto">

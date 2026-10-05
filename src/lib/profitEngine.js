@@ -210,35 +210,51 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     }
   })
 
-  // ====== UPSELL ANALYSIS (single pass) ======
-  const UPSELL_PATTERNS = ['premium gift box', 'gift wrap', '5 in 1 gift box']
-  const isUpsellFamily = (f) => UPSELL_PATTERNS.some(p => f.toLowerCase().includes(p))
-  const upsellCache = new Map()
-  const isUpsellItem = (title) => {
-    let v = upsellCache.get(title)
-    if (v === undefined) { const l = title.toLowerCase(); v = UPSELL_PATTERNS.some(p => l.includes(p)); upsellCache.set(title, v) }
+  // ====== UPSELL / ADD-ON ANALYSIS (single pass) ======
+  // Add-ons are low-value items attached to a hero product. Each add-on family is
+  // tracked separately so attach rate + AOV lift can be read per add-on (e.g. Jhumka Box on Name Necklace).
+  const ADDON_PATTERNS = [
+    { key: 'gift box', label: 'Gift Box / Wrap', match: ['premium gift box', 'gift wrap', '5 in 1 gift box'] },
+    { key: 'jhumka box', label: '12 in 1 Jhumka Box', match: ['12 in 1 personalised jhumka box', '12 in 1 jhumka', 'jhumka box'] },
+  ]
+  const addonCache = new Map()
+  const addonKeyOf = (title) => {
+    let v = addonCache.get(title)
+    if (v === undefined) {
+      const l = title.toLowerCase()
+      v = ADDON_PATTERNS.find(a => a.match.some(m => l.includes(m)))?.key || null
+      addonCache.set(title, v)
+    }
     return v
   }
+  const isAddonFamily = (f) => !!addonKeyOf(f)
 
-  const perFamily = {}  // family -> { orders: [], totalOrderValue, totalUpsellRevenue, withBox }
+  // perFamily[hero] = { orders, totalOrderValue, addons: { key: {label, revenue, count} }, totalAddonRevenue, withAnyAddon }
+  const perFamily = {}
   activeOrders.forEach(order => {
-    const upsellItems = order.lineItems.filter(i => isUpsellItem(i.title))
-    const hasUpsell = upsellItems.length > 0
-    const upsellRevenue = upsellItems.reduce((s, i) => s + parseFloat(i.price) * i.quantity, 0)
-    // One shared summary object per order, referenced by every hero family in it
+    const addonLines = order.lineItems.map(i => ({ i, key: addonKeyOf(i.title) })).filter(x => x.key)
+    const totalAddonRevenue = addonLines.reduce((s, x) => s + parseFloat(x.i.price) * x.i.quantity, 0)
+    const hasAny = addonLines.length > 0
     const summary = {
       id: order.id, name: order.name, total: order.totalPrice,
-      paymentType: order.paymentType, hasUpsell, upsellRevenue,
+      paymentType: order.paymentType, hasUpsell: hasAny, upsellRevenue: totalAddonRevenue,
+      addonKeys: [...new Set(addonLines.map(x => x.key))],
       items: order.lineItems.map(i => ({ title: i.title, qty: i.quantity, price: parseFloat(i.price) })),
     }
-    const fams = new Set(order.lineItems.map(i => famOf(i.title)).filter(f => f && !isUpsellFamily(f)))
-    fams.forEach(f => {
-      if (!perFamily[f]) perFamily[f] = { orders: [], totalOrderValue: 0, totalUpsellRevenue: 0, withBox: 0 }
+    const heroFams = new Set(order.lineItems.map(i => famOf(i.title)).filter(f => f && !isAddonFamily(f)))
+    heroFams.forEach(f => {
+      if (!perFamily[f]) perFamily[f] = { orders: [], totalOrderValue: 0, totalAddonRevenue: 0, withAnyAddon: 0, addons: {} }
       const pf = perFamily[f]
       pf.orders.push(summary)
       pf.totalOrderValue += order.totalPrice
-      pf.totalUpsellRevenue += upsellRevenue
-      if (hasUpsell) pf.withBox++
+      pf.totalAddonRevenue += totalAddonRevenue
+      if (hasAny) pf.withAnyAddon++
+      addonLines.forEach(x => {
+        const def = ADDON_PATTERNS.find(a => a.key === x.key)
+        if (!pf.addons[x.key]) pf.addons[x.key] = { key: x.key, label: def?.label || x.key, revenue: 0, orderIds: new Set() }
+        pf.addons[x.key].revenue += parseFloat(x.i.price) * x.i.quantity
+        pf.addons[x.key].orderIds.add(order.id)
+      })
     })
   })
 
@@ -247,17 +263,23 @@ export function calculateFullPnL(orders, metaAllocation = {}, customVendorPrices
     const n = pf.orders.length
     if (n === 0) return
     const aovCurrent = pf.totalOrderValue / n
-    const aovWithoutBox = (pf.totalOrderValue - pf.totalUpsellRevenue) / n
-    const aovLiftAmount = pf.totalUpsellRevenue / n
+    const aovWithoutBox = (pf.totalOrderValue - pf.totalAddonRevenue) / n
+    const aovLiftAmount = pf.totalAddonRevenue / n
+    const addons = Object.values(pf.addons).map(a => {
+      const cnt = a.orderIds.size
+      return { key: a.key, label: a.label, count: cnt, attachRate: cnt / n,
+        revenue: a.revenue, aovLiftAmount: a.revenue / n, avgPerAttached: cnt > 0 ? a.revenue / cnt : 0 }
+    }).sort((x, y) => y.revenue - x.revenue)
     upsellAnalysis[family] = {
       totalOrders: n,
-      withUpsellCount: pf.withBox,
-      withoutUpsellCount: n - pf.withBox,
-      attachRate: pf.withBox / n,
+      withUpsellCount: pf.withAnyAddon,
+      withoutUpsellCount: n - pf.withAnyAddon,
+      attachRate: pf.withAnyAddon / n,
       aovCurrent, aovWithoutBox, aovLiftAmount,
       aovLiftPct: aovWithoutBox > 0 ? aovLiftAmount / aovWithoutBox : 0,
-      totalUpsellRevenue: pf.totalUpsellRevenue,
-      avgUpsellPerBoxOrder: pf.withBox > 0 ? pf.totalUpsellRevenue / pf.withBox : 0,
+      totalUpsellRevenue: pf.totalAddonRevenue,
+      avgUpsellPerBoxOrder: pf.withAnyAddon > 0 ? pf.totalAddonRevenue / pf.withAnyAddon : 0,
+      addons,
       orders: pf.orders,
     }
   })
